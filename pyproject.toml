@@ -1,0 +1,25 @@
+[tool.poetry.scripts]
+train = "fcos.cli.train.__main__:main"
+detect = "fcos.cli.detect.__main__:main"
+
+[tool.poetry]
+name = "fcos"
+version = "0.1.0"
+description = ""
+authors = ["Ross Hemsley <rlhemsley@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+tensorboard = "^2.2.1"
+torch = "^1.5.0"
+torchvision = "^0.6.0"
+opencv-python = "^4.2.0"
+click = "^7.1.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+pylint = "^2.5.0"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
