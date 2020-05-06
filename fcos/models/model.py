@@ -14,9 +14,9 @@ CLASSES = [
     "CAR",
 ]
 
+
 class FCOS(nn.Module):
     classes = CLASSES
-
 
     def __init__(self):
         super(FCOS, self).__init__()
@@ -62,7 +62,7 @@ class FCOS(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 4, kernel_size=3, padding=1),
         )
-    
+
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -112,13 +112,13 @@ class FCOS(nn.Module):
             if i == 0:
                 min_box_side = 0
             else:
-                min_box_side = self.strides[i-1]
-            
-            if i == len(feature_pyramid)-1:
+                min_box_side = self.strides[i - 1]
+
+            if i == len(feature_pyramid) - 1:
                 max_box_side = math.inf
             else:
                 max_box_side = self.strides[i]
-            
+
             # print("min height", min_box_side)
             # print("max height", min_box_side)
 
@@ -126,10 +126,10 @@ class FCOS(nn.Module):
             classes_i = self.class_head(feature)
 
             # B[ltrb]HW  -> BHW[ltrb]
-            regression_i = regression_i.permute(0,2,3,1).contiguous()
+            regression_i = regression_i.permute(0, 2, 3, 1).contiguous()
 
             # B[classes]HW  -> BHW[classes]
-            classes_i = classes_i.permute(0,2,3,1).contiguous()
+            classes_i = classes_i.permute(0, 2, 3, 1).contiguous()
 
             boxes_i = _extract_boxes(
                 regression_i,
@@ -149,17 +149,19 @@ class FCOS(nn.Module):
             # class_labels = class_labels.to(x.device)
             # boxes: B[ltrb]
             # classes: B[classes]
-            boxes = torch.cat([t.view(n_batches, -1, 4) for t in boxes_by_feature], dim=1)
-            classes = torch.cat([t.view(n_batches, -1, len(CLASSES)) for t in classes_by_feature], dim=1)
-            scores, classes, boxes = _gather_detections(boxes, classes, self.max_detections)
+            boxes = torch.cat(
+                [t.view(n_batches, -1, 4) for t in boxes_by_feature], dim=1
+            )
+            classes = torch.cat(
+                [t.view(n_batches, -1, len(CLASSES)) for t in classes_by_feature], dim=1
+            )
+            scores, classes, boxes = _gather_detections(
+                boxes, classes, self.max_detections
+            )
             return scores, classes, boxes
 
         box_target, class_target = _targets(
-            image_height,
-            image_width,
-            box_labels,
-            class_labels,
-            len(self.classes),
+            image_height, image_width, box_labels, class_labels, len(self.classes),
         )
         box_target = box_target.to(x.device)
         class_target = class_target.to(x.device)
@@ -172,7 +174,7 @@ class FCOS(nn.Module):
             classes_i = classes_by_feature[i]
 
             l = _box_loss(boxes_i, self.strides[i], box_target, class_target) / 50.0
-            lc = _class_loss(classes_i, self.strides[i], class_target) 
+            lc = _class_loss(classes_i, self.strides[i], class_target)
 
             losses.append(l)
             losses.append(lc)
@@ -197,8 +199,8 @@ def _class_loss(classes, stride, class_target):
     inval = classes.reshape(-1, 2)
     tar = target_view.reshape(-1)
 
-
     return loss(inval, tar)
+
 
 def _targets(image_height, image_width, box_labels, class_labels, num_classes):
     """
@@ -210,8 +212,8 @@ def _targets(image_height, image_width, box_labels, class_labels, num_classes):
     box_classes = torch.zeros(batches, image_height, image_width, dtype=torch.int64)
 
     for batch in range(batches):
-        widths = box_labels[batch][:,2] -  box_labels[batch][:,0]
-        heights = box_labels[batch][:,3] -  box_labels[batch][:,1]
+        widths = box_labels[batch][:, 2] - box_labels[batch][:, 0]
+        heights = box_labels[batch][:, 3] - box_labels[batch][:, 1]
         areas = torch.mul(widths, heights)
 
         indices = torch.argsort(areas, dim=0, descending=True)
@@ -231,6 +233,7 @@ def _feature_loss_targets(labels, features, image_height, image_width, stride):
     """
     Takes a feature map for a single layer of the FPN
     """
+
 
 def _gather_detections(boxes, classes, max_detections):
     # classes: BHW[c] class index of each box
@@ -255,7 +258,7 @@ def _gather_detections(boxes, classes, max_detections):
         top_boxes_i = torch.index_select(boxes_i, 0, top_detection_indices)
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
-        
+
         # print("BEFORE filter", top_boxes_i.shape)
         boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
 
@@ -268,7 +271,6 @@ def _gather_detections(boxes, classes, max_detections):
         classes_by_batch.append(top_classes_i)
         scores_by_batch.append(top_scores_i)
 
-
     top_boxes = torch.stack(boxes_by_batch, dim=0)
     top_classes = torch.stack(classes_by_batch, dim=0)
     top_scores = torch.stack(scores_by_batch, dim=0)
@@ -276,7 +278,9 @@ def _gather_detections(boxes, classes, max_detections):
     return top_scores, top_classes, top_boxes
 
 
-def _extract_boxes(pred_box, image_height, image_width, scale, stride, min_box_side, max_box_side):
+def _extract_boxes(
+    pred_box, image_height, image_width, scale, stride, min_box_side, max_box_side
+):
     """
     Returns B[x_min, y_min, x_max, y_max], in image space
     """
@@ -285,21 +289,22 @@ def _extract_boxes(pred_box, image_height, image_width, scale, stride, min_box_s
     half_stride = stride / 2.0
     batches, rows, cols, _ = pred_box.shape
 
-    y = torch.linspace(half_stride, image_height - half_stride, rows).to(pred_box.device)
+    y = torch.linspace(half_stride, image_height - half_stride, rows).to(
+        pred_box.device
+    )
     x = torch.linspace(half_stride, image_width - half_stride, cols).to(pred_box.device)
 
     center_y, center_x = torch.meshgrid(y, x)
     center_y = center_y.squeeze(0)
     center_x = center_x.squeeze(0)
 
-    min_size = image_height/scale
+    min_size = image_height / scale
     pred_box = pred_box.clamp(min_box_side, max_box_side)
 
     x_min = center_x - pred_box[:, :, :, 0]
     y_min = center_y - pred_box[:, :, :, 1]
     x_max = center_x + pred_box[:, :, :, 2]
     y_max = center_y + pred_box[:, :, :, 3]
-
 
     result = torch.stack([x_min, y_min, x_max, y_max], dim=3)
 
@@ -308,8 +313,5 @@ def _extract_boxes(pred_box, image_height, image_width, scale, stride, min_box_s
 
 def _upsample(x):
     return F.interpolate(
-        x,
-        size=(x.shape[2] * 2, x.shape[3] * 2),
-        mode="bilinear",
-        align_corners=True
+        x, size=(x.shape[2] * 2, x.shape[3] * 2), mode="bilinear", align_corners=True
     )

@@ -11,8 +11,13 @@ import numpy as np
 
 
 from fcos.datasets import tensor_to_image, collate_fn
-from fcos.inference import compute_detections_for_tensor, render_detections_to_image, detections_from_net
+from fcos.inference import (
+    compute_detections_for_tensor,
+    render_detections_to_image,
+    detections_from_net,
+)
 from fcos.models import FCOS
+
 
 def train(dataset):
     # x, box_labels, class_labels = dataset[0]
@@ -45,7 +50,9 @@ def train(dataset):
 
     # grid = torchvision.utils.make_grid([img])
     with SummaryWriter() as writer:
-        trainloader = torch.utils.data.DataLoader(dataset, batch_size=5, shuffle=True, num_workers=2, collate_fn=collate_fn)
+        trainloader = torch.utils.data.DataLoader(
+            dataset, batch_size=5, shuffle=True, num_workers=2, collate_fn=collate_fn
+        )
 
         # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
         learning_rate = 0.0001
@@ -76,11 +83,20 @@ def train(dataset):
                 loss = model(x, box_labels, class_labels)
                 loss.backward()
                 optimizer.step()
-                print("EPOCH:", epoch, "batch item i", i, "of", len(trainloader), "LOSS", loss.item())
-                writer.add_scalar('Loss/train', loss.item(), i)
+                print(
+                    "EPOCH:",
+                    epoch,
+                    "batch item i",
+                    i,
+                    "of",
+                    len(trainloader),
+                    "LOSS",
+                    loss.item(),
+                )
+                writer.add_scalar("Loss/train", loss.item(), i)
                 steps += 1
 
-                if i %100 ==0:
+                if i % 100 == 0:
                     with torch.no_grad():
                         _test_model(i, writer, model, dataset, device)
 
@@ -90,6 +106,8 @@ def train(dataset):
 
             print("learning rate step")
             scheduler.step()
+
+
 def _test_model(i, writer, model, dataset, device):
     images = []
     for j in range(10):
@@ -125,9 +143,3 @@ def _test_model(i, writer, model, dataset, device):
 # )[0]
 # render_detections_to_image(img_labels, ground_truth_detections)
 # writer.add_image("fcos labels", img_labels, 0, dataformats="HWC")
-
-
-
-
-
-

@@ -12,26 +12,33 @@ import PIL.Image
 from torchvision.transforms import ToPILImage
 
 from torch.utils.data import DataLoader
-from torchvision.transforms import (RandomResizedCrop, RandomHorizontalFlip, Normalize, RandomErasing, Resize, ToTensor, RandomAffine, Compose, ColorJitter)
+from torchvision.transforms import (
+    RandomResizedCrop,
+    RandomHorizontalFlip,
+    Normalize,
+    RandomErasing,
+    Resize,
+    ToTensor,
+    RandomAffine,
+    Compose,
+    ColorJitter,
+)
 
 
-dataset = Cityscapes("/home/ross/datasets/CS", 
+dataset = Cityscapes(
+    "/home/ross/datasets/CS",
     split="train",
     mode="fine",
     target_type=["polygon"],
-    transform=Compose([
-        Resize(256),
-        ToTensor(),
-    ])
+    transform=Compose([Resize(256), ToTensor(),]),
 )
+
 
 def tensor_to_image(t) -> np.ndarray:
     """
     Return an opencv convention image (BGR)
     """
-    img = Compose([
-        ToPILImage(),
-    ])(t)
+    img = Compose([ToPILImage(),])(t)
 
     arr = np.array(img)
     result = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
@@ -70,7 +77,7 @@ def image_to_tensor(t):
 #                 img = cv2.rectangle(img, (min_x, min_y), (max_x, max_y), (0,0,0),1 )
 
 #     # open_cv_image = np.array(img)
-#     # open_cv_image = open_cv_image[:, :, ::-1].copy() 
+#     # open_cv_image = open_cv_image[:, :, ::-1].copy()
 #     img = img[:,:,[2,1,0]]
 #     return PIL.Image.fromarray(img)
 
@@ -80,14 +87,12 @@ def image_to_tensor(t):
 class CityscapesData(Dataset):
     def __init__(self, dataset=None):
         if dataset is None:
-            self.dataset = Cityscapes("/home/ross/datasets/CS", 
+            self.dataset = Cityscapes(
+                "/home/ross/datasets/CS",
                 split="train",
                 mode="fine",
                 target_type=["polygon"],
-                transform=Compose([
-                    Resize(512),
-                    ToTensor(),
-                ])
+                transform=Compose([Resize(512), ToTensor(),]),
             )
 
     def __len__(self):
@@ -128,4 +133,8 @@ def _poly_to_labels(image_tensor, poly):
 
 
 def collate_fn(batch):
-    return (torch.stack([b[0] for b in batch], dim=0), [b[1] for b in batch], [b[2] for b in batch])
+    return (
+        torch.stack([b[0] for b in batch], dim=0),
+        [b[1] for b in batch],
+        [b[2] for b in batch],
+    )

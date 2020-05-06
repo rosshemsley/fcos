@@ -12,10 +12,11 @@ class Backbone(nn.Module):
     layer 2: 1028, H/16, W/16
     layer 3: 2048, H/32, W/32
     """
+
     def __init__(self):
         super(Backbone, self).__init__()
         self.resnet = resnet50(pretrained=True)
-    
+
     def forward(self, x):
         x = self.resnet.conv1(x)
         x = self.resnet.bn1(x)
