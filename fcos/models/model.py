@@ -67,6 +67,10 @@ class FCOS(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = False
 
+    def unfreeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = True
+
     def forward(self, x, box_labels=None, class_labels=None):
         """
         forward takes as input an image encoded as BCHW
@@ -101,6 +105,23 @@ class FCOS(nn.Module):
         classes_by_feature = []
 
         for i, feature in enumerate(feature_pyramid):
+
+            # print("image size", x.shape)
+            # print("FEATURE SIZE", feature.shape)
+            # print("stride", self.strides[i])
+            if i == 0:
+                min_box_side = 0
+            else:
+                min_box_side = self.strides[i-1]
+            
+            if i == len(feature_pyramid)-1:
+                max_box_side = math.inf
+            else:
+                max_box_side = self.strides[i]
+            
+            # print("min height", min_box_side)
+            # print("max height", min_box_side)
+
             regression_i = self.regression_head(feature)
             classes_i = self.class_head(feature)
 
@@ -116,6 +137,8 @@ class FCOS(nn.Module):
                 image_width,
                 self.scales[i],
                 self.strides[i],
+                min_box_side,
+                max_box_side,
             )
 
             boxes_by_feature.append(boxes_i)
@@ -148,7 +171,7 @@ class FCOS(nn.Module):
             boxes_i = boxes_by_feature[i]
             classes_i = classes_by_feature[i]
 
-            l = _box_loss(boxes_i, self.strides[i], box_target, class_target) / 100.0
+            l = _box_loss(boxes_i, self.strides[i], box_target, class_target) / 50.0
             lc = _class_loss(classes_i, self.strides[i], class_target) 
 
             losses.append(l)
@@ -233,11 +256,13 @@ def _gather_detections(boxes, classes, max_detections):
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
         
+        # print("BEFORE filter", top_boxes_i.shape)
         boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]
         top_scores_i = top_scores_i[boxes_to_keep]
+        # print("AFTER filter", top_boxes_i.shape)
 
         boxes_by_batch.append(top_boxes_i)
         classes_by_batch.append(top_classes_i)
@@ -251,7 +276,7 @@ def _gather_detections(boxes, classes, max_detections):
     return top_scores, top_classes, top_boxes
 
 
-def _extract_boxes(pred_box, image_height, image_width, scale, stride):
+def _extract_boxes(pred_box, image_height, image_width, scale, stride, min_box_side, max_box_side):
     """
     Returns B[x_min, y_min, x_max, y_max], in image space
     """
@@ -267,7 +292,8 @@ def _extract_boxes(pred_box, image_height, image_width, scale, stride):
     center_y = center_y.squeeze(0)
     center_x = center_x.squeeze(0)
 
-    pred_box = pred_box.clamp(0, (image_height *8)/float(stride))
+    min_size = image_height/scale
+    pred_box = pred_box.clamp(min_box_side, max_box_side)
 
     x_min = center_x - pred_box[:, :, :, 0]
     y_min = center_y - pred_box[:, :, :, 1]

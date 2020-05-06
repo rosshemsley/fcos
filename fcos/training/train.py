@@ -45,22 +45,26 @@ def train(dataset):
 
     # grid = torchvision.utils.make_grid([img])
     with SummaryWriter() as writer:
-        trainloader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2, collate_fn=collate_fn)
+        trainloader = torch.utils.data.DataLoader(dataset, batch_size=5, shuffle=True, num_workers=2, collate_fn=collate_fn)
 
         # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
         learning_rate = 0.0001
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        scheduler = StepLR(optimizer, step_size=1, gamma=0.7)
-
+        scheduler = StepLR(optimizer, step_size=1, gamma=0.9)
 
         steps = 0
         for epoch in range(100):
             print("START EPOCH", epoch)
-            for i, data in enumerate(trainloader, 0):
+            if epoch == 0:
+                print("FREEZE BACKBONE")
                 model.freeze_backbone()
+            else:
+                print("UNFREEZE BACKBONE")
+                model.unfreeze_backbone()
 
-                print("EPOCH:", epoch, "batch item i", i, "of", len(trainloader))
+            for i, data in enumerate(trainloader, 0):
+
                 # get the inputs; data is a list of [inputs, labels]
                 x, box_labels, class_labels = data
 
@@ -72,8 +76,7 @@ def train(dataset):
                 loss = model(x, box_labels, class_labels)
                 loss.backward()
                 optimizer.step()
-
-                print("LOSS", loss.item())
+                print("EPOCH:", epoch, "batch item i", i, "of", len(trainloader), "LOSS", loss.item())
                 writer.add_scalar('Loss/train', loss.item(), i)
                 steps += 1
 
