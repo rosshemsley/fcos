@@ -40,54 +40,14 @@ def tensor_to_image(t) -> np.ndarray:
     """
     img = Compose([ToPILImage(),])(t)
 
-    result = np.array(img)
-    # result = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
-
-    return result
-
-
-def image_to_tensor(t):
-    ...
-    # img = Compose([
-    #     ToPILImage(),
-    # ])(t)
-
-
-# def tensor_to_image(t, labels=None):
-#     img = Compose([
-#         ToPILImage(),
-#     ])(t)
-
-#     # return img
-#     img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
-#     if labels:
-#         h = labels["imgHeight"]
-#         w = labels["imgWidth"]
-
-#         scaling = min(img.shape[:2])/min(h,w)
-
-#         for obj in labels["objects"]:
-#             if obj["label"] == "car":
-#                 polygon = obj["polygon"]
-#                 min_x = int(min(x for x, _ in polygon) * scaling)
-#                 max_x = int(max(x for x, _ in polygon) * scaling)
-#                 max_y = int(max(y for _, y in polygon) * scaling)
-#                 min_y = int(min(y for _, y in polygon) * scaling)
-#                 img = cv2.rectangle(img, (min_x, min_y), (max_x, max_y), (0,0,0),1 )
-
-#     # open_cv_image = np.array(img)
-#     # open_cv_image = open_cv_image[:, :, ::-1].copy()
-#     img = img[:,:,[2,1,0]]
-#     return PIL.Image.fromarray(img)
-
-#     # return open_cv_image
+    return np.array(img)
 
 
 class CityscapesData(Dataset):
     def __init__(self, dataset=None):
         if dataset is None:
             self.dataset = Cityscapes(
+                # TODO(Ross): make this an argument
                 "/home/ross/datasets/CS",
                 split="train",
                 mode="fine",

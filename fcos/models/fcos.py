@@ -114,10 +114,8 @@ def normalize_batch(x: torch.FloatTensor) -> torch.FloatTensor:
     """
     f = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    # print("im range", x.max(), x.min())
     for b in range(x.shape[0]):
         f(x[b])
-    # print("im range", x.max(), x.min())
 
     return x
 
@@ -127,7 +125,7 @@ def _boxes_from_regression(reg, img_height, img_width, scale, stride):
     Returns B[x_min, y_min, x_max, y_max], in image space, given regression
     values, which represent offests (left, top, right, bottom).
     """
-    # force all values to be positive and rescale them
+    # Note(Ross): we square to ensure all values are positive
     reg = torch.pow(reg * scale, 2)
     half_stride = stride / 2.0
     _, rows, cols, _ = reg.shape

@@ -10,6 +10,7 @@ from fcos.models import FCOS, normalize_batch
 MIN_SCORE = 0.05
 DEFAULT_MAX_DETECTIONS = 3000
 
+
 @dataclass
 class Detection:
     score: float
@@ -53,13 +54,11 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
             all_classes.append(feature_classes.view(batch_size, -1, len(model.classes)))
             all_boxes.append(feature_boxes.view(batch_size, -1, 4))
 
-
         classes_ = torch.cat(all_classes, dim=1)
         boxes_ = torch.cat(all_boxes, dim=1)
 
         scores, classes, boxes = _gather_detections(classes_, boxes_)
         return detections_from_net(boxes, classes, scores)[0]
-
 
 
 def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) -> List[List[Detection]]:
@@ -115,8 +114,6 @@ def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) 
 #         #     return scores, classes, boxes
 
 #         # losses = []
-
-
 
 
 # def _feature_loss_targets(labels, features, img_height, img_width, stride):
@@ -178,6 +175,3 @@ def _gather_detections(classes, boxes, max_detections=DEFAULT_MAX_DETECTIONS):
     top_scores = torch.stack(scores_by_batch, dim=0)
 
     return top_scores, top_classes, top_boxes
-
-
-
