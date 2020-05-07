@@ -1,8 +1,9 @@
 # 🔎  FCOS Pytorch
 
-_A model implementing 2D detections in images, trained on Cityscapes_
+_A model implementing 2D object detection in images, trained on Cityscapes_
 
-This is a pure python implementation of FCOS using pytorch, adapted from the paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
+This is a pure python implementation of the fully convolutional one-stage anchor free FCOS algorithm.
+It has been slightly adapted from the original paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
 
 ⚠️  _Note_ This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
 
