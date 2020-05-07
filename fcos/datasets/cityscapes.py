@@ -1,3 +1,6 @@
+import pathlib
+import logging
+
 from torch import nn
 import numpy as np
 import torch
@@ -6,9 +9,6 @@ import torchvision.transforms as T
 from torch.utils.data import Dataset
 from torchvision.datasets.cityscapes import Cityscapes
 import cv2
-
-import importlib
-import PIL.Image
 from torchvision.transforms import ToPILImage
 
 from torch.utils.data import DataLoader
@@ -24,44 +24,55 @@ from torchvision.transforms import (
     ColorJitter,
 )
 
-
-dataset = Cityscapes(
-    "/home/ross/datasets/CS",
-    split="train",
-    mode="fine",
-    target_type=["polygon"],
-    transform=Compose([Resize(256), ToTensor(),]),
-)
+logger = logging.getLogger(__name__)
 
 
-def tensor_to_image(t) -> np.ndarray:
-    """
-    Return an opencv convention image (BGR)
-    """
-    img = Compose([ToPILImage(),])(t)
+from enum import Enum
 
-    return np.array(img)
+
+class Split(Enum):
+    TEST = 1
+    TRAIN = 2
+    VALIDATE = 3
 
 
 class CityscapesData(Dataset):
-    def __init__(self, dataset=None):
-        if dataset is None:
-            self.dataset = Cityscapes(
-                # TODO(Ross): make this an argument
-                "/home/ross/datasets/CS",
-                split="train",
-                mode="fine",
-                target_type=["polygon"],
-                transform=Compose([Resize(512), ToTensor(),]),
-            )
+    def __init__(self, split: Split, cityscapes_dir: pathlib.Path):
+        v = _get_split(split)
+        logger.info(f"Loading Cityscapes '{v}' dataset from '{cityscapes_dir}'")
 
-    def __len__(self):
+        self.dataset = Cityscapes(
+            # TODO(Ross): make this an argument
+            cityscapes_dir,
+            split=v,
+            mode="fine",
+            target_type=["polygon"],
+            transform=Compose([Resize(512), ToTensor(),]),
+        )
+
+    def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, idx):
         img, poly = self.dataset[idx]
         class_labels, box_labels = _poly_to_labels(img, poly)
         return img, class_labels, box_labels
+
+
+def collate_fn(batch):
+    return (
+        torch.stack([b[0] for b in batch], dim=0),
+        [b[1] for b in batch],
+        [b[2] for b in batch],
+    )
+
+
+def tensor_to_image(t) -> np.ndarray:
+    """
+    Return a PIL image (RGB)
+    """
+    img = Compose([ToPILImage(),])(t)
+    return np.array(img)
 
 
 def _poly_to_labels(image_tensor, poly):
@@ -93,9 +104,12 @@ def _poly_to_labels(image_tensor, poly):
     return torch.stack(class_labels), torch.stack(box_labels)
 
 
-def collate_fn(batch):
-    return (
-        torch.stack([b[0] for b in batch], dim=0),
-        [b[1] for b in batch],
-        [b[2] for b in batch],
-    )
+def _get_split(split_name: str) -> Split:
+    if split_name is Split.TEST:
+        return "test"
+    elif split_name is Split.VALIDATE:
+        return "val"
+    elif split_name is Split.TRAIN:
+        return "train"
+    else:
+        raise ValueError(f"unknown split kind {split_name}")

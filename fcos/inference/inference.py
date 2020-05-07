@@ -39,7 +39,6 @@ def compute_detections(model: FCOS, img: np.ndarray, device) -> List[Detection]:
 def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
     with torch.no_grad():
         x = x.to(device)
-        x = torch.unsqueeze(x, 0)
 
         batch_size = x.shape[0]
         batch = normalize_batch(x)
@@ -118,8 +117,8 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
 
-        top_scores_i = top_scores_i.mul(top_centernesses_i)
-        boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
+        recentered_top_scores_i = top_scores_i.mul(top_centernesses_i)
+        boxes_to_keep = torchvision.ops.nms(top_boxes_i, recentered_top_scores_i, 0.6)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]

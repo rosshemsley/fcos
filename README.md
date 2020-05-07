@@ -27,7 +27,10 @@ $ poetry build
 ```
 
 ## Training
-Once you have built the project, you can use the following to train the network
+Once you have built the project, you can use the following to train the network.
+The `--verbose` flag enables extra logging.
 ```
-$ poetry run train
+poetry run train \
+    --cityscapes-dir <path/to/Cityscapes> \
+    --verbose
 ```

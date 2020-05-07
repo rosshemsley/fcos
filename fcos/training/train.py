@@ -1,16 +1,18 @@
+import pathlib
+import os
+
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
+import logging
 
-
-import os
 import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 import numpy as np
+from torch.utils.data import DataLoader
 
-
-from fcos.datasets import tensor_to_image, collate_fn
+from fcos.datasets import tensor_to_image, collate_fn, CityscapesData, Split
 from fcos.inference import (
     compute_detections_for_tensor,
     render_detections_to_image,
@@ -20,113 +22,128 @@ from fcos.models import FCOS, normalize_batch
 
 from .targets import generate_targets
 
+logger = logging.getLogger(__name__)
 
-def train(dataset):
+
+def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
+    val_loader = DataLoader(
+        CityscapesData(Split.VALIDATE, cityscapes_dir),
+        batch_size=1,
+        shuffle=False,
+        num_workers=2,
+        collate_fn=collate_fn,
+    )
+
+    train_loader = DataLoader(
+        CityscapesData(Split.TRAIN, cityscapes_dir),
+        batch_size=3,
+        shuffle=True,
+        num_workers=2,
+        collate_fn=collate_fn,
+    )
+
     if torch.cuda.is_available():
-        print("using cuda")
+        logger.info("Using Cuda")
         device = torch.device("cuda")
     else:
-        print("using cpu")
+        logger.warning("Cuda not available, falling back to cpu")
         device = torch.device("cpu")
 
     model = FCOS()
     model.to(device)
+    checkpoint = 0
 
-    with SummaryWriter() as writer:
-        trainloader = torch.utils.data.DataLoader(
-            dataset, batch_size=3, shuffle=True, num_workers=2, collate_fn=collate_fn
-        )
+    learning_rate = 0.0001
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = StepLR(optimizer, step_size=1, gamma=0.8)
 
-        learning_rate = 0.0001
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    for epoch in range(100):
+        logger.info(f"Starting epoch {epoch}")
 
-        scheduler = StepLR(optimizer, step_size=1, gamma=0.9)
+        model.train()
 
-        for epoch in range(100):
-            print("START EPOCH", epoch)
+        if epoch == 0:
+            logger.info("Freezing backbone network")
+            model.freeze_backbone()
+        else:
+            logger.info("Unfreezing backbone network")
+            model.unfreeze_backbone()
 
-            model.train()
+        for train_idx, (x, class_labels, box_labels) in enumerate(train_loader, 0):
+            batch_size = x.shape[0]
 
-            if epoch == 0:
-                print("FREEZE BACKBONE")
-                model.freeze_backbone()
-            else:
-                print("UNFREEZE BACKBONE")
-                model.unfreeze_backbone()
+            optimizer.zero_grad()
 
-            for train_idx, (x, class_labels, box_labels) in enumerate(trainloader, 0):
-                batch_size = x.shape[0]
+            x = x.to(device)
+            batch = normalize_batch(x)
 
-                optimizer.zero_grad()
+            classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
+            (
+                class_targets_by_feature,
+                centerness_targets_by_feature,
+                box_targets_by_feature,
+            ) = generate_targets(x.shape, class_labels, box_labels, model.strides)
 
-                x = x.to(device)
-                batch = normalize_batch(x)
+            class_loss = torch.nn.CrossEntropyLoss()
+            box_loss = torch.nn.L1Loss()
+            centerness_loss = torch.nn.BCELoss()
 
-                classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
-                (
-                    class_targets_by_feature,
-                    centerness_targets_by_feature,
-                    box_targets_by_feature,
-                ) = generate_targets(x.shape, class_labels, box_labels, model.strides)
+            losses = []
 
-                class_loss = torch.nn.CrossEntropyLoss()
-                box_loss = torch.nn.L1Loss()
-                centerness_loss = torch.nn.BCELoss()
+            for feature_idx in range(len(classes_by_feature)):
+                cls_target = class_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
+                centerness_target = centerness_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
+                box_target = box_targets_by_feature[feature_idx].to(device).view(batch_size, -1, 4)
 
-                losses = []
+                cls_view = classes_by_feature[feature_idx].view(batch_size, -1, len(model.classes))
+                box_view = boxes_by_feature[feature_idx].view(batch_size, -1, 4)
+                centerness_view = centerness_by_feature[feature_idx].view(batch_size, -1)
 
-                for feature_idx in range(len(classes_by_feature)):
-                    cls_target = class_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
-                    centerness_target = (
-                        centerness_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
-                    )
-                    box_target = box_targets_by_feature[feature_idx].to(device).view(batch_size, -1, 4)
+                for batch_idx in range(batch_size):
+                    losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
+                    losses.append(centerness_loss(centerness_view, centerness_target))
 
-                    cls_view = classes_by_feature[feature_idx].view(batch_size, -1, len(model.classes))
-                    box_view = boxes_by_feature[feature_idx].view(batch_size, -1, 4)
-                    centerness_view = centerness_by_feature[feature_idx].view(batch_size, -1)
+                    mask = cls_target[batch_idx] > 0
+                    if mask.nonzero().shape[0] > 0:
+                        losses.append(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0)
 
-                    for batch_idx in range(batch_size):
-                        losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
-                        losses.append(centerness_loss(centerness_view, centerness_target))
+            loss = torch.stack(losses).mean()
 
-                        mask = cls_target[batch_idx] > 0
-                        if mask.nonzero().shape[0] > 0:
-                            losses.append(
-                                box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0
-                            )
+            print(
+                "EPOCH:", epoch, "batch item i", train_idx, "of", len(train_loader), "LOSS", loss.item(),
+            )
 
-                loss = torch.stack(losses).mean()
+            writer.add_scalar("Loss/train", loss.item(), train_idx)
+            loss.backward()
+            optimizer.step()
 
-                print(
-                    "EPOCH:", epoch, "batch item i", train_idx, "of", len(trainloader), "LOSS", loss.item(),
-                )
+            if train_idx % 100 == 0:
+                logger.info("Running validation...")
+                with torch.no_grad():
+                    model.eval()
+                    _test_model(checkpoint, writer, model, val_loader, device)
 
-                writer.add_scalar("Loss/train", loss.item(), train_idx)
-                loss.backward()
-                optimizer.step()
+                path = os.path.join("checkpoints", f"{checkpoint}.chkpt")
+                logger.info(f"Saving checkpoint to '{path}'")
+                torch.save(model.state_dict(), path)
+                checkpoint += 1
 
-                if train_idx % 100 == 0:
-                    print("test model")
-                    with torch.no_grad():
-                        model.eval()
-                        _test_model(train_idx, writer, model, dataset, device)
-
-                    path = os.path.join("checkpoints", f"{train_idx}.chkpt")
-                    print("save to ", path)
-                    torch.save(model.state_dict(), path)
-
-            scheduler.step()
+        scheduler.step()
 
 
-def _test_model(i, writer, model, dataset, device):
+def _test_model(checkpoint, writer, model, loader, device):
     images = []
-    for j in range(10):
-        x, _, _ = dataset[j]
-        img = tensor_to_image(x)
+    for i, (x, class_labels, box_labels) in enumerate(loader, 0):
+        if i == 10:
+            break
 
+        logging.info(f"Validation for {i}")
+        img = tensor_to_image(x[0])
         x = x.to(device)
         detections = compute_detections_for_tensor(model, x, device)
         render_detections_to_image(img, detections)
 
-        writer.add_image(f"fcos test {j}", img, i, dataformats="HWC")
+        writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
+
+
+    writer.flush()
