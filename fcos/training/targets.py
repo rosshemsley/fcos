@@ -19,6 +19,7 @@ def generate_targets(
     batch_size = img_shape[0]
 
     class_targets_by_feature = []
+    centerness_target_by_feature = []
     box_targets_by_feature = []
 
     for i, stride in enumerate(strides):
@@ -26,6 +27,7 @@ def generate_targets(
         w = int(img_shape[3] / stride)
 
         class_target_for_feature = torch.zeros(batch_size, h, w, dtype=int)
+        centerness_target_for_feature = torch.zeros(batch_size, h, w)
         box_target_for_feature = torch.zeros(batch_size, h, w, 4)
 
         min_box_side = 0 if i == 0 else strides[i - 1]
@@ -39,21 +41,37 @@ def generate_targets(
             areas = torch.mul(widths, heights)
 
             for j in torch.argsort(areas, dim=0, descending=True):
-                if heights[j] < min_box_side or heights[j] > max_box_side:
-                    continue
-                if widths[j] < min_box_side or widths[j] > max_box_side:
-                    continue
-
                 min_x = int(box_labels[j][0] / stride)
                 min_y = int(box_labels[j][1] / stride)
                 max_x = int(box_labels[j][2] / stride) + 1
                 max_y = int(box_labels[j][3] / stride) + 1
 
+                for x in range(min_x, max_x):
+                    for y in range(min_y, max_y):
+                        dist_l = x - min_x
+                        dist_r = max_x - x
+                        dist_t = y - min_y
+                        dist_b = max_y - y
+
+                        centerness = math.sqrt(
+                            min(dist_l, dist_r)
+                            / max(dist_l, dist_r)
+                            * min(dist_t, dist_b)
+                            / max(dist_t, dist_b)
+                        )
+                        centerness_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = centerness
+
+                if heights[j] < min_box_side or heights[j] > max_box_side:
+                    continue
+                if widths[j] < min_box_side or widths[j] > max_box_side:
+                    continue
+
                 class_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = class_labels[j]
                 box_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = box_labels[j]
 
         class_targets_by_feature.append(class_target_for_feature)
+        centerness_target_by_feature.append(centerness_target_for_feature)
         box_targets_by_feature.append(box_target_for_feature)
 
     # Return [BHWC, BHW[min_x, min_y, max_x, max_y]]
-    return class_targets_by_feature, box_targets_by_feature
+    return class_targets_by_feature, centerness_target_by_feature, box_targets_by_feature

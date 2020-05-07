@@ -32,7 +32,7 @@ class FCOS(nn.Module):
         self.p5_to_p6 = nn.Conv2d(256, 256, kernel_size=3, padding=1, stride=2)
         self.p6_to_p7 = nn.Conv2d(256, 256, kernel_size=3, padding=1, stride=2)
 
-        self.class_head = nn.Sequential(
+        self.classification_head = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
@@ -41,8 +41,10 @@ class FCOS(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, len(CLASSES), kernel_size=3, padding=1),
         )
+
+        self.classification_to_class = nn.Conv2d(256, len(CLASSES), kernel_size=3, padding=1)
+        self.classification_to_centerness = nn.Conv2d(256, 1, kernel_size=3, padding=1)
 
         self.regression_head = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
@@ -64,7 +66,9 @@ class FCOS(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = True
 
-    def forward(self, x: torch.FloatTensor) -> List[Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    def forward(
+        self, x: torch.FloatTensor
+    ) -> Tuple[List[torch.FloatTensor], List[torch.FloatTensor], List[torch.FloatTensor]]:
         """
         Takes as input a batch of images encoded as BCHW, which have been normalized using
         the function `fcos.models.normalize_batch`.
@@ -88,21 +92,28 @@ class FCOS(nn.Module):
         feature_pyramid = [p3, p4, p5, p6, p7]
 
         classes_by_feature = []
+        centerness_by_feature = []
         boxes_by_feature = []
 
         for scale, stride, feature in zip(self.scales, self.strides, feature_pyramid):
-            classes = self.class_head(feature)
+            classification = self.classification_head(feature)
+            classes = self.classification_to_class(classification)
+            centerness = self.classification_to_centerness(classification)
             reg = self.regression_head(feature)
 
             # B[C]HW  -> BHW[C]
             classes = classes.permute(0, 2, 3, 1).contiguous()
+            centerness = centerness.permute(0, 2, 3, 1).contiguous()
             reg = reg.permute(0, 2, 3, 1).contiguous()
 
             boxes = _boxes_from_regression(reg, img_height, img_width, scale, stride)
+            centerness = centerness.clamp(0.0, 1.0)
+
             boxes_by_feature.append(boxes)
+            centerness_by_feature.append(centerness)
             classes_by_feature.append(classes)
 
-        return classes_by_feature, boxes_by_feature
+        return classes_by_feature, centerness_by_feature, boxes_by_feature
 
 
 def normalize_batch(x: torch.FloatTensor) -> torch.FloatTensor:

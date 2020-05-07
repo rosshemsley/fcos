@@ -62,24 +62,33 @@ def train(dataset):
                 x = x.to(device)
                 batch = normalize_batch(x)
 
-                classes_by_feature, boxes_by_feature = model(batch)
-                class_targets_by_feature, box_targets_by_feature = generate_targets(
-                    x.shape, class_labels, box_labels, model.strides
-                )
+                classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
+                (
+                    class_targets_by_feature,
+                    centerness_targets_by_feature,
+                    box_targets_by_feature,
+                ) = generate_targets(x.shape, class_labels, box_labels, model.strides)
 
                 class_loss = torch.nn.CrossEntropyLoss()
                 box_loss = torch.nn.L1Loss()
+                centerness_loss = torch.nn.BCELoss()
 
                 losses = []
+
                 for feature_idx in range(len(classes_by_feature)):
                     cls_target = class_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
+                    centerness_target = (
+                        centerness_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
+                    )
                     box_target = box_targets_by_feature[feature_idx].to(device).view(batch_size, -1, 4)
 
                     cls_view = classes_by_feature[feature_idx].view(batch_size, -1, len(model.classes))
                     box_view = boxes_by_feature[feature_idx].view(batch_size, -1, 4)
+                    centerness_view = centerness_by_feature[feature_idx].view(batch_size, -1)
 
                     for batch_idx in range(batch_size):
                         losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
+                        losses.append(centerness_loss(centerness_view, centerness_target))
 
                         mask = cls_target[batch_idx] > 0
                         if mask.nonzero().shape[0] > 0:
