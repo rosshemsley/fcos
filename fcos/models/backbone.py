@@ -1,5 +1,4 @@
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision.models import resnet50
 
 
@@ -7,10 +6,10 @@ class Backbone(nn.Module):
     """
     Backbone based on a pretrained resnet50.
 
-    Returns layers three layers
-    layer 1: 512,  H/8, W/8
-    layer 2: 1028, H/16, W/16
-    layer 3: 2048, H/32, W/32
+    Returns three layers
+    - layer 1: 512,  H/8, W/8
+    - layer 2: 1028, H/16, W/16
+    - layer 3: 2048, H/32, W/32
     """
 
     def __init__(self):

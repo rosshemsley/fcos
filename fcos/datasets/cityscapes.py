@@ -40,8 +40,8 @@ def tensor_to_image(t) -> np.ndarray:
     """
     img = Compose([ToPILImage(),])(t)
 
-    arr = np.array(img)
-    result = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    result = np.array(img)
+    # result = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
     return result
 
@@ -100,8 +100,8 @@ class CityscapesData(Dataset):
 
     def __getitem__(self, idx):
         img, poly = self.dataset[idx]
-        box_labels, class_labels = _poly_to_labels(img, poly)
-        return img, box_labels, class_labels
+        class_labels, box_labels = _poly_to_labels(img, poly)
+        return img, class_labels, box_labels
 
 
 def _poly_to_labels(image_tensor, poly):
@@ -128,8 +128,9 @@ def _poly_to_labels(image_tensor, poly):
             class_labels.append(torch.IntTensor([1]))
 
     if len(class_labels) == 0:
-        return torch.zeros(0, 4), torch.zeros(0, 1)
-    return torch.stack(box_labels), torch.stack(class_labels)
+        return torch.zeros((0, 1)), torch.zeros(0, 4)
+
+    return torch.stack(class_labels), torch.stack(box_labels)
 
 
 def collate_fn(batch):

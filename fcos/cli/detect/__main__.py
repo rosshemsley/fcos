@@ -6,12 +6,8 @@ from fcos.inference import compute_detections
 
 
 @click.command()
-@click.argument(
-    "image", required=True, help="path to images", type=click.Path(exists=True)
-)
-@click.argument(
-    "model", required=True, help="path to images", type=click.Path(exists=True)
-)
+@click.argument("image", required=True, help="path to images", type=click.Path(exists=True))
+@click.argument("model", required=True, help="path to images", type=click.Path(exists=True))
 def main(image):
 
     if torch.cuda.is_available():

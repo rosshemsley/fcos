@@ -16,21 +16,12 @@ from fcos.inference import (
     render_detections_to_image,
     detections_from_net,
 )
-from fcos.models import FCOS
+from fcos.models import FCOS, normalize_batch
+
+from .targets import generate_targets
 
 
 def train(dataset):
-    # x, box_labels, class_labels = dataset[0]
-    # print("image", img)
-
-    # img = np.zeros((3, 100, 100))
-    # img[0] = np.arange(0, 10000).reshape(100, 100) / 10000
-    # img[1] = 1 - np.arange(0, 10000).reshape(100, 100) / 10000
-
-    # img_HWC = np.zeros((100, 100, 3))
-    # img_HWC[:, :, 0] = np.arange(0, 10000).reshape(100, 100) / 10000
-    # img_HWC[:, :, 1] = 1 - np.arange(0, 10000).reshape(100, 100) / 10000
-
     if torch.cuda.is_available():
         print("using cuda")
         device = torch.device("cuda")
@@ -41,17 +32,9 @@ def train(dataset):
     model = FCOS()
     model.to(device)
 
-    # train_loader = DataLoader(
-    #     dataset,
-    #     batch_size=5,
-    #     shuffle=True,
-    #     num_workers=8,
-    # )
-
-    # grid = torchvision.utils.make_grid([img])
     with SummaryWriter() as writer:
         trainloader = torch.utils.data.DataLoader(
-            dataset, batch_size=5, shuffle=True, num_workers=2, collate_fn=collate_fn
+            dataset, batch_size=3, shuffle=True, num_workers=2, collate_fn=collate_fn
         )
 
         # optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -62,6 +45,8 @@ def train(dataset):
 
         steps = 0
         for epoch in range(100):
+            model.train()
+
             print("START EPOCH", epoch)
             if epoch == 0:
                 print("FREEZE BACKBONE")
@@ -70,41 +55,74 @@ def train(dataset):
                 print("UNFREEZE BACKBONE")
                 model.unfreeze_backbone()
 
-            for i, data in enumerate(trainloader, 0):
+            for train_idx, (x, class_labels, box_labels) in enumerate(trainloader, 0):
+                batch_size = x.shape[0]
+                print("batch size", batch_size, "training labels count", len(class_labels))
 
-                # get the inputs; data is a list of [inputs, labels]
-                x, box_labels, class_labels = data
-
-                x = x.to(device)
-                # zero the parameter gradients
                 optimizer.zero_grad()
 
-                # forward + backward + optimize
-                loss = model(x, box_labels, class_labels)
+                x = x.to(device)
+
+                batch = normalize_batch(x)
+                batch = batch.to(device)
+                classes_by_feature, boxes_by_feature = model(batch)
+
+                class_targets_by_feature, box_targets_by_feature = generate_targets(x.shape, class_labels, box_labels, model.strides)
+
+                class_loss = torch.nn.CrossEntropyLoss()
+                box_loss = torch.nn.L1Loss()
+
+                # loss = torch.tensor(0.0).to(device)
+                losses = []
+                for feature_idx in range(len(classes_by_feature)):
+
+                    # print("target has ", class_targets_by_feature[j][0].nonzero().sum(), "elements" )
+                    # writer.add_image(f"CLASS TARGET test {j}", class_targets_by_feature[j][0] * 255, i, dataformats="HW")
+
+                    cls_target = class_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
+                    box_target = box_targets_by_feature[feature_idx].to(device).view(batch_size, -1, 4)
+
+                    cls_view = classes_by_feature[feature_idx].view(batch_size, -1, len(model.classes))
+                    box_view = boxes_by_feature[feature_idx].view(batch_size, -1, 4)
+
+                    for batch_idx in range(batch_size):
+                        l = class_loss(cls_view[batch_idx], cls_target[batch_idx])
+                        # print('class loss', l.item())
+                        losses.append(l)
+
+                        mask = cls_target[batch_idx] > 0
+                        if mask.nonzero().shape[0] > 0:
+                            bl = box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0
+                            # print('box loss', bl.item())
+                            losses.append(bl)
+
+                loss = torch.stack(losses).mean()
+
+                print(
+                    "EPOCH:", epoch, "batch item i", train_idx, "of", len(trainloader), "LOSS", loss.item(),
+                )
+
+                writer.add_scalar("Loss/train", loss.item(), train_idx)
                 loss.backward()
                 optimizer.step()
-                print(
-                    "EPOCH:",
-                    epoch,
-                    "batch item i",
-                    i,
-                    "of",
-                    len(trainloader),
-                    "LOSS",
-                    loss.item(),
-                )
-                writer.add_scalar("Loss/train", loss.item(), i)
+                    
+
                 steps += 1
 
-                if i % 100 == 0:
-                    with torch.no_grad():
-                        _test_model(i, writer, model, dataset, device)
+                # forward + backward + optimize
+                # loss = fcos_loss(targets, classes_by_feature, boxes_by_feature)
+                # loss.backward()
 
-                    path = os.path.join("checkpoints", f"{i}.chkpt")
+                if train_idx % 100 == 0:
+                    print("test model")
+                    with torch.no_grad():
+                        model.eval()
+                        _test_model(train_idx, writer, model, dataset, device)
+
+                    path = os.path.join("checkpoints", f"{train_idx}.chkpt")
                     print("save to ", path)
                     torch.save(model.state_dict(), path)
 
-            print("learning rate step")
             scheduler.step()
 
 
@@ -113,6 +131,7 @@ def _test_model(i, writer, model, dataset, device):
     for j in range(10):
         x, _, _ = dataset[j]
         img = tensor_to_image(x)
+
         x = x.to(device)
         detections = compute_detections_for_tensor(model, x, device)
         render_detections_to_image(img, detections)
@@ -120,26 +139,42 @@ def _test_model(i, writer, model, dataset, device):
         writer.add_image(f"fcos test {j}", img, i, dataformats="HWC")
 
 
-# x = x.to(\)
-# box_labels = box_labels.to(device)
-# class_labels = class_labels.to(device)
-# loss = model(
-#     torch.unsqueeze(x, dim=0),
-#     torch.unsqueeze(box_labels, dim=0),
-#     torch.unsqueeze(class_labels, dim=0),
-# )
+#         # # Compute loss for each feature map
+#         # for i, feature in enumerate(feature_pyramid):
+#         #     box_target, class_target = _targets(
+#         #         img_height, img_width, box_labels, class_labels, len(self.classes), self.strides[i]
+#         #     )
 
-# print("LOSS", loss)
+#         #     box_target = box_target.to(device)
+#         #     class_target = class_target.to(device)
 
-# # detections = compute_detections_for_tensor(model, x, device)
-# # img = tensor_to_image(x)
-# # render_detections_to_image(img, detections)
-# # writer.add_image("fcos detections", img, 0, dataformats="HWC")
+#         #     boxes_i = boxes_by_feature[i]
+#         #     classes_i = classes_by_feature[i]
 
-# img_labels = tensor_to_image(x.cpu())
-# ground_truth_detections = detections_from_net(
-#     torch.unsqueeze(box_labels, dim=0),
-#     torch.unsqueeze(class_labels, dim=0)
-# )[0]
-# render_detections_to_image(img_labels, ground_truth_detections)
-# writer.add_image("fcos labels", img_labels, 0, dataformats="HWC")
+#         #     l = _box_loss(boxes_i, self.strides[i], box_target, class_target) / 50.0
+#         #     lc = _class_loss(classes_i, self.strides[i], class_target)
+
+#         #     losses.append(l)
+#         #     losses.append(lc)
+
+#         # loss = torch.stack(losses)
+#         # return loss.mean()
+
+
+# def _box_loss(boxes, stride, box_target, class_target):
+#     target_view = box_target[:, ::stride, ::stride, :]
+#     mask = class_target[:, ::stride, ::stride] > 0
+#     loss = nn.L1Loss()
+#     v = loss(boxes[mask], target_view[mask])
+#     return v
+
+
+# def _class_loss(classes, stride, class_target):
+#     target_view = class_target[:, ::stride, ::stride]
+
+#     loss = nn.CrossEntropyLoss()
+
+#     inval = classes.reshape(-1, 2)
+#     tar = target_view.reshape(-1)
+
+#     return loss(inval, tar)
