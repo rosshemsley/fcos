@@ -47,7 +47,7 @@ def test(cityscapes_dir, model_checkpoint, output):
 
     model = FCOS()
     model.to(device)
-    model.load_state_dict(state)
+    model.load_state_dict(state["model"])
 
     loader = DataLoader(
         CityscapesData(Split.TEST, cityscapes_dir, image_transforms=[Resize(512)]),

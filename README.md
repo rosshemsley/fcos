@@ -8,6 +8,17 @@ This package will work with or without a cuda GPU. Without a GPU, you're going t
 
 ⚠️  **Note** This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
 
+## Quickstart
+From zero to training in under 2 minuts (assumes you have `pyenv` installed, with a working Python 3.8.1 available).
+
+```
+pyenv local 3.8.1
+pip install virtualenv
+python -m virtualenv env
+source env/bin/activate
+pip install git+https://github.com/rosshemsley/fcos
+fcos train --cityscapes-dir <path/to/cityscapes> -v
+```
 
 ## Installing with pip
 You can **pip install this package directly** if your pip is recent enough (20.1 is known to work).

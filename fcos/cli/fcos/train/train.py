@@ -6,7 +6,7 @@ import click
 
 from torch.utils.tensorboard import SummaryWriter
 from fcos.datasets import CityscapesData
-from fcos.training import train
+from fcos.training import train as run_training
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 DEBUG_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -45,4 +45,4 @@ def train(
 
     with SummaryWriter(log_dir=log_dir) as writer:
         logger.info(f"Logging tensorboard logs to '{writer.log_dir}'")
-        train(cityscapes_dir, writer)
+        run_training(cityscapes_dir, writer)
