@@ -8,6 +8,7 @@ from .test import test
 def fcos():
     pass
 
+
 fcos.add_command(train)
 fcos.add_command(test)
 
