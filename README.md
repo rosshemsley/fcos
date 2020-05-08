@@ -34,14 +34,10 @@ $ poetry run pytest tests
 ```
 
 ## Training
-Once you have installed the package, you can use the bundled CLI to train and test the network. Training status is logged so that tensorboard can read it.
-The following commands assume you have activated the environment containing the installed package. If you installed using poetry, you could instead prefix the commands
-with `poetry run`. For example, to see the options in the provided CLI, you can use
+Once you have installed the package, you can use the bundled CLI to train and test the network.
+The following commands assume you have activated the environment containing the installed package.
 
-```
-$ poetry run fcos --help
-```
-
+The following command may be used to train the network
 ```
 $ fcos train \
     --cityscapes-dir <path/to/Cityscapes> \
@@ -56,7 +52,7 @@ $ tensorboard --logdir runs
 Models are written to the same directory as the tensorboard logs for now, the default is at `runs/`.
 
 ### Evaluating on the test set
-A CLI is provided for testing inference on the Cityscapes test set.
+To test inference on the Cityscapes test set.
 
 ```
 $ fcos test
