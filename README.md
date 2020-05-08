@@ -5,7 +5,20 @@ _A model implementing 2D object detection in images, trained on Cityscapes_
 This is a pure python implementation of the fully convolutional one-stage anchor free FCOS algorithm.
 It has been slightly adapted from the original paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
 
+
 ⚠️  _Note_ This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
+
+
+## Installing with pip
+If you are using a recent version of pip (version 20.1 is known to work), you can **pip install this package directly** using
+
+```
+$ pip install git+https://github.com/rosshemsley/fcos
+```
+
+As usual, it is recommended that this is done into a virtual environment and a local python environment.
+From within your environment.
+
 
 ## Local development
 This project uses python 3.8. It is recommended that you use `pyenv` to set up a local version of Python.
