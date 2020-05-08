@@ -27,7 +27,7 @@ DEBUG_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     required=True,
 )
-def main(
+def train(
     cityscapes_dir: pathlib.Path, log_dir: Optional[pathlib.Path], verbose: bool, debug: bool,
 ):
     if debug:
@@ -42,7 +42,3 @@ def main(
     with SummaryWriter(log_dir=log_dir) as writer:
         logger.info(f"Logging tensorboard logs to '{writer.log_dir}'")
         train(cityscapes_dir, writer)
-
-
-if __name__ == "__main__":
-    main()

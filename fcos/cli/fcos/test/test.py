@@ -30,7 +30,7 @@ from fcos.datasets import CityscapesData, Split, collate_fn, tensor_to_image
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     required=True,
 )
-def main(cityscapes_dir, model_checkpoint, output):
+def test(cityscapes_dir, model_checkpoint, output):
     if torch.cuda.is_available():
         print("using cuda")
         device = torch.device("cuda")
@@ -70,7 +70,3 @@ def main(cityscapes_dir, model_checkpoint, output):
 
         path = os.path.join(output, f"img_{i}.png")
         cv2.imwrite(path, img)
-
-
-if __name__ == "__main__":
-    main()

@@ -3,8 +3,7 @@ line-length = 110
 target-version = ["py38"]
 
 [tool.poetry.scripts]
-test = "fcos.cli.test.__main__:main"
-detect = "fcos.cli.detect.__main__:main"
+fcos = "fcos.cli.fcos.__main__:fcos"
 
 [tool.poetry]
 name = "fcos"

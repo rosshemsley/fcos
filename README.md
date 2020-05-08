@@ -16,7 +16,7 @@ You can **pip install this package directly** if your pip is recent enough (20.1
 $ pip install git+https://github.com/rosshemsley/fcos
 ```
 
-## Local development
+## Installing locally
 It is recommended that you use `pyenv` to set up a local version of Python. From the project root, run
 
 ```
@@ -35,17 +35,22 @@ $ poetry run pytest tests
 
 ## Training
 Once you have installed the package, you can use the bundled CLI to train and test the network. Training status is logged so that tensorboard can read it.
-
+The following commands assume you have activated the environment containing the installed package. If you installed using poetry, you could instead prefix the commands
+with `poetry run`. For example, to see the options in the provided CLI, you can use
 
 ```
-$ poetry run train \
+$ poetry run fcos --help
+```
+
+```
+$ fcos train \
     --cityscapes-dir <path/to/Cityscapes> \
     --verbose
 ```
 
 To track status using tensorboard, you can run
 ```
-$ poetry run tensorboard --logdir runs
+$ tensorboard --logdir runs
 ```
 
 Models are written to the same directory as the tensorboard logs for now, the default is at `runs/`.
@@ -54,7 +59,7 @@ Models are written to the same directory as the tensorboard logs for now, the de
 A CLI is provided for testing inference on the Cityscapes test set.
 
 ```
-$ poetry run test
+$ fcos test
     --cityscapes-dir <path/to/Cityscapes> \
     --model-checkpoint <path/to/checkpoint.chkpt> \
     --output ./output 
