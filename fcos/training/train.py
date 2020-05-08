@@ -12,6 +12,18 @@ from torchvision import datasets, transforms
 import numpy as np
 from torch.utils.data import DataLoader
 
+from torchvision.transforms import (
+    RandomResizedCrop,
+    RandomHorizontalFlip,
+    Normalize,
+    RandomErasing,
+    Resize,
+    ToTensor,
+    RandomAffine,
+    Compose,
+    ColorJitter,
+)
+
 from fcos.datasets import tensor_to_image, collate_fn, CityscapesData, Split
 from fcos.inference import (
     compute_detections_for_tensor,
@@ -28,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     val_loader = DataLoader(
-        CityscapesData(Split.VALIDATE, cityscapes_dir),
+        CityscapesData(Split.VALIDATE, cityscapes_dir, image_transforms=[Resize(512)]),
         batch_size=3,
         shuffle=False,
         num_workers=2,
@@ -36,7 +48,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     )
 
     train_loader = DataLoader(
-        CityscapesData(Split.TRAIN, cityscapes_dir),
+        CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
         batch_size=3,
         shuffle=True,
         num_workers=2,
@@ -54,23 +66,21 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     model.to(device)
     checkpoint = 0
 
-    learning_rate = 0.01
+    learning_rate = 1e-4
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    scheduler = StepLR(optimizer, step_size=1, gamma=0.8)
 
     logger.info("Freezing backbone network")
     model.freeze_backbone()
 
-    for epoch in range(100):
+    for epoch in range(1, 100):
         logger.info(f"Starting epoch {epoch}")
-
-        model.train()
 
         if epoch == 3:
             logger.info("Unfreezing backbone network")
             model.unfreeze_backbone()
 
-        for train_idx, (x, class_labels, box_labels) in enumerate(train_loader, 0):
+        for batch_index, (x, class_labels, box_labels) in enumerate(train_loader, 0):
+            model.train()
             optimizer.zero_grad()
 
             x = x.to(device)
@@ -82,27 +92,28 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             )
 
             loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
+            logging.info(f"Epoch: {epoch}, batch: {batch_index}/{len(train_loader)}, loss: {loss.item()}")
 
-            logging.info(
-                f"Epoch: {epoch} batch {train_idx} of {len(train_loader)}, loss: {loss.item()}"
-            )
-
-            writer.add_scalar("Loss/train", loss.item(), train_idx)
+            writer.add_scalar("Loss/train", loss.item(), batch_index)
             loss.backward()
             optimizer.step()
 
-            if train_idx % 100 == 0:
+            if batch_index % 100 == 0:
                 logger.info("Running validation...")
 
                 with torch.no_grad():
                     _test_model(checkpoint, writer, model, val_loader, device)
 
-                path = os.path.join("checkpoints", f"{checkpoint}.chkpt")
+                path = os.path.join(writer.log_dir, f"fcos_{checkpoint}.chkpt")
                 logger.info(f"Saving checkpoint to '{path}'")
-                torch.save(model.state_dict(), path)
+                state = dict(
+                    model=model.state_dict(),
+                    epoch=epoch,
+                    batch_index=batch_index,
+                    optimizer_state=optimizer.state_dict(),
+                )
+                torch.save(state, path)
                 checkpoint += 1
-
-        scheduler.step()
 
 
 def _compute_loss(
@@ -141,7 +152,6 @@ def _compute_loss(
 def _test_model(checkpoint, writer, model, loader, device):
     model.eval()
 
-    images = []
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
         if i == 10:
             break

@@ -20,7 +20,7 @@ DEBUG_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     "--debug", type=bool, is_flag=True,
 )
 @click.option(
-    "--tensorboard-log-dir", type=click.Path(file_okay=False, dir_okay=True),
+    "--log-dir", type=click.Path(file_okay=False, dir_okay=True),
 )
 @click.option(
     "--cityscapes-dir",
@@ -28,7 +28,7 @@ DEBUG_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     required=True,
 )
 def main(
-    cityscapes_dir: pathlib.Path, tensorboard_log_dir: Optional[pathlib.Path], verbose: bool, debug: bool,
+    cityscapes_dir: pathlib.Path, log_dir: Optional[pathlib.Path], verbose: bool, debug: bool,
 ):
     if debug:
         logging.basicConfig(level=logging.INFO, format=DEBUG_LOG_FORMAT)
@@ -39,7 +39,7 @@ def main(
 
     logger = logging.getLogger(__name__)
 
-    with SummaryWriter(log_dir=tensorboard_log_dir) as writer:
+    with SummaryWriter(log_dir=log_dir) as writer:
         logger.info(f"Logging tensorboard logs to '{writer.log_dir}'")
         train(cityscapes_dir, writer)
 

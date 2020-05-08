@@ -37,9 +37,11 @@ class Split(Enum):
 
 
 class CityscapesData(Dataset):
-    def __init__(self, split: Split, cityscapes_dir: pathlib.Path):
+    def __init__(self, split: Split, cityscapes_dir: pathlib.Path, image_transforms=None):
         v = _get_split(split)
         logger.info(f"Loading Cityscapes '{v}' dataset from '{cityscapes_dir}'")
+
+        t = image_transforms if image_transforms is not None else []
 
         self.dataset = Cityscapes(
             # TODO(Ross): make this an argument
@@ -47,7 +49,7 @@ class CityscapesData(Dataset):
             split=v,
             mode="fine",
             target_type=["polygon"],
-            transform=Compose([Resize(512), ToTensor(),]),
+            transform=Compose([*t, ToTensor()]),
         )
 
     def __len__(self) -> int:
