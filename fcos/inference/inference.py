@@ -50,21 +50,19 @@ def detections_from_network_output(classes, centernesses, boxes):
     all_centernesses = []
     all_boxes = []
 
-    n_classes = feature_classes[0].shape[-1]
-    batch_size = x.shape[0]
+    n_classes = classes[0].shape[-1]
+    batch_size = classes[0].shape[0]
 
-    for feature_classes, feature_centerness, feature_boxes in zip(
-        classes_by_feature, centerness_by_feature, boxes_by_feature
-    ):
-        all_classes.append(feature_classes.view(batch_size, -1, n_classes))
-        all_centernesses.append(feature_centerness.view(batch_size, -1))
-        all_boxes.append(feature_boxes.view(batch_size, -1, 4))
+    for feat_classes, feat_centernesses, feat_boxes in zip(classes, centernesses, boxes):
+        all_classes.append(feat_classes.view(batch_size, -1, n_classes))
+        all_centernesses.append(feat_centernesses.view(batch_size, -1))
+        all_boxes.append(feat_boxes.view(batch_size, -1, 4))
 
     classes_ = torch.cat(all_classes, dim=1)
     centernesses_ = torch.cat(all_centernesses, dim=1)
     boxes_ = torch.cat(all_boxes, dim=1)
 
-    gathered_scores, gathered_classes, gathered_boxes = _gather_detections(classes_, centernesses_, boxes_)
+    gathered_boxes, gathered_classes, gathered_scores = _gather_detections(classes_, centernesses_, boxes_)
     return detections_from_net(gathered_boxes, gathered_classes, gathered_scores)
 
 
@@ -76,7 +74,7 @@ def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) 
     """
     result = []
 
-    for batch in range(classes_by_batch.shape[0]):
+    for batch in range(len(classes_by_batch)):
         scores = scores_by_batch[batch] if scores_by_batch is not None else None
         classes = classes_by_batch[batch]
         boxes = boxes_by_batch[batch]
@@ -133,8 +131,4 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         classes_by_batch.append(top_classes_i)
         scores_by_batch.append(top_scores_i)
 
-    top_boxes = torch.stack(boxes_by_batch, dim=0)
-    top_classes = torch.stack(classes_by_batch, dim=0)
-    top_scores = torch.stack(scores_by_batch, dim=0)
-
-    return top_scores, top_classes, top_boxes
+    return boxes_by_batch, classes_by_batch, scores_by_batch

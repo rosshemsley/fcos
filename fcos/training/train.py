@@ -17,6 +17,7 @@ from fcos.inference import (
     compute_detections_for_tensor,
     render_detections_to_image,
     detections_from_net,
+    detections_from_network_output,
 )
 from fcos.models import FCOS, normalize_batch
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     val_loader = DataLoader(
         CityscapesData(Split.VALIDATE, cityscapes_dir),
-        batch_size=1,
+        batch_size=3,
         shuffle=False,
         num_workers=2,
         collate_fn=collate_fn,
@@ -53,19 +54,19 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     model.to(device)
     checkpoint = 0
 
-    learning_rate = 0.0001
+    learning_rate = 0.01
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = StepLR(optimizer, step_size=1, gamma=0.8)
+
+    logger.info("Freezing backbone network")
+    model.freeze_backbone()
 
     for epoch in range(100):
         logger.info(f"Starting epoch {epoch}")
 
         model.train()
 
-        if epoch == 0:
-            logger.info("Freezing backbone network")
-            model.freeze_backbone()
-        else:
+        if epoch == 3:
             logger.info("Unfreezing backbone network")
             model.unfreeze_backbone()
 
@@ -92,8 +93,8 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
 
             if train_idx % 100 == 0:
                 logger.info("Running validation...")
+
                 with torch.no_grad():
-                    model.eval()
                     _test_model(checkpoint, writer, model, val_loader, device)
 
                 path = os.path.join("checkpoints", f"{checkpoint}.chkpt")
@@ -138,6 +139,8 @@ def _compute_loss(
 
 
 def _test_model(checkpoint, writer, model, loader, device):
+    model.eval()
+
     images = []
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
         if i == 10:
@@ -153,6 +156,14 @@ def _test_model(checkpoint, writer, model, loader, device):
         detections = detections_from_network_output(classes, centernesses, boxes)
         render_detections_to_image(img, detections[0])
 
+        class_targets, centerness_targets, box_targets = generate_targets(
+            x.shape, class_labels, box_labels, model.strides
+        )
+
+        loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
+        logging.info(f"Validation loss: {loss.item()}")
+
+        writer.add_scalar("Loss/val", loss.item(), checkpoint)
         writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
 
     writer.flush()
