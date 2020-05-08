@@ -44,23 +44,28 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
         batch = normalize_batch(x)
         classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
 
-        all_classes = []
-        all_centernesses = []
-        all_boxes = []
 
-        for feature_classes, feature_centerness, feature_boxes in zip(
-            classes_by_feature, centerness_by_feature, boxes_by_feature
-        ):
-            all_classes.append(feature_classes.view(batch_size, -1, len(model.classes)))
-            all_centernesses.append(feature_centerness.view(batch_size, -1))
-            all_boxes.append(feature_boxes.view(batch_size, -1, 4))
+def detections_from_network_output(classes, centernesses, boxes):
+    all_classes = []
+    all_centernesses = []
+    all_boxes = []
 
-        classes_ = torch.cat(all_classes, dim=1)
-        centernesses_ = torch.cat(all_centernesses, dim=1)
-        boxes_ = torch.cat(all_boxes, dim=1)
+    n_classes = feature_classes[0].shape[-1]
+    batch_size = x.shape[0]
 
-        scores, classes, boxes = _gather_detections(classes_, centernesses_, boxes_)
-        return detections_from_net(boxes, classes, scores)[0]
+    for feature_classes, feature_centerness, feature_boxes in zip(
+        classes_by_feature, centerness_by_feature, boxes_by_feature
+    ):
+        all_classes.append(feature_classes.view(batch_size, -1, n_classes))
+        all_centernesses.append(feature_centerness.view(batch_size, -1))
+        all_boxes.append(feature_boxes.view(batch_size, -1, 4))
+
+    classes_ = torch.cat(all_classes, dim=1)
+    centernesses_ = torch.cat(all_centernesses, dim=1)
+    boxes_ = torch.cat(all_boxes, dim=1)
+
+    gathered_scores, gathered_classes, gathered_boxes = _gather_detections(classes_, centernesses_, boxes_)
+    return detections_from_net(gathered_boxes, gathered_classes, gathered_scores)
 
 
 def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) -> List[List[Detection]]:

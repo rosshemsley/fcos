@@ -4,4 +4,5 @@ from .inference import (
     Detection,
     render_detections_to_image,
     detections_from_net,
+    detections_from_network_output,
 )

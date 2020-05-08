@@ -145,9 +145,13 @@ def _test_model(checkpoint, writer, model, loader, device):
 
         logging.info(f"Validation for {i}")
         img = tensor_to_image(x[0])
+
         x = x.to(device)
-        detections = compute_detections_for_tensor(model, x, device)
-        render_detections_to_image(img, detections)
+        x = normalize_batch(x)
+
+        classes, centernesses, boxes = model(x)
+        detections = detections_from_network_output(classes, centernesses, boxes)
+        render_detections_to_image(img, detections[0])
 
         writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
 
