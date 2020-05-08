@@ -17,9 +17,8 @@ $ pip install git+https://github.com/rosshemsley/fcos
 ```
 
 ## Local development
-It is recommended that you use `pyenv` to set up a local version of Python.
+It is recommended that you use `pyenv` to set up a local version of Python. From the project root, run
 
-From the project root, run
 ```
 $ pyenv local 3.8
 ```
@@ -35,8 +34,8 @@ $ poetry run pytest tests
 ```
 
 ## Training
-Once you have built the project, you can use the following to train the network.
-The `--verbose` flag enables extra logging.
+Once you have installed the package, you can use the bundled CLI to train and test the network. Training status is logged so that tensorboard can read it.
+
 
 ```
 $ poetry run train \
@@ -44,18 +43,15 @@ $ poetry run train \
     --verbose
 ```
 
-Training status is logged so that tensorboard can read it
-
+To track status using tensorboard, you can run
 ```
 $ poetry run tensorboard --logdir runs
 ```
 
-Logs the status of the training and validation loss, as well as logging intermediate results of running inference on the val set.
-
 Models are written to the same directory as the tensorboard logs for now, the default is at `runs/`.
 
 ### Evaluating on the test set
-A cli is provided for testing inference on the Cityscapes test set.
+A CLI is provided for testing inference on the Cityscapes test set.
 
 ```
 $ poetry run test
