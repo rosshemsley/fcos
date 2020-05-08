@@ -4,9 +4,9 @@ _A model implementing 2D object detection in images, trained on Cityscapes_
 
 This is a pure Python 3.8 implementation of the fully convolutional one-stage anchor free FCOS algorithm.
 It has been slightly adapted from the original paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
+This package will work with or without a cuda GPU. Without a GPU, you're going to be waiting a fair bit longer.
 
-
-⚠️  _Note_ This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
+⚠️  **Note** This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
 
 
 ## Installing with pip
