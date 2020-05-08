@@ -9,7 +9,7 @@ This package will work with or without a cuda GPU. Without a GPU, you're going t
 ⚠️  **Note** This is still just a toy implementation. You probably shouldn't try and use it for anything yet.
 
 ## Quickstart
-From zero to training in under 2 minuts (assumes you have `pyenv` installed, with a working Python 3.8.1 available).
+From zero to training in under 2 minutes (assumes you have `pyenv` installed, with a working Python 3.8.1 available).
 
 ```
 pyenv local 3.8.1
