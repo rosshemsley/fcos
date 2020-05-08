@@ -31,6 +31,11 @@ from fcos.datasets import CityscapesData, Split, collate_fn, tensor_to_image
     required=True,
 )
 def test(cityscapes_dir, model_checkpoint, output):
+    """
+    Test the fcos model from a given checkpoint on the cityscapes test set.
+    Writes detections to the given output directory.
+    """
+
     if torch.cuda.is_available():
         print("using cuda")
         device = torch.device("cuda")

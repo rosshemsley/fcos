@@ -6,6 +6,10 @@ from .test import test
 
 @click.group()
 def fcos():
+    """
+    A CLI to train and test the fcos 2D object detection model, taken from the paper
+    'FCOS: Fully Convolutional One-Stage Object Detection'.
+    """
     pass
 
 

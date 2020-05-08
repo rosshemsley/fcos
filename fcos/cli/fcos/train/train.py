@@ -30,6 +30,10 @@ DEBUG_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 def train(
     cityscapes_dir: pathlib.Path, log_dir: Optional[pathlib.Path], verbose: bool, debug: bool,
 ):
+    """
+    Train the FCOS model using Cityscapes data at the given path.
+    """
+
     if debug:
         logging.basicConfig(level=logging.INFO, format=DEBUG_LOG_FORMAT)
     elif verbose:

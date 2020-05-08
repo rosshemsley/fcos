@@ -121,7 +121,7 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
 
         recentered_top_scores_i = top_scores_i.mul(top_centernesses_i)
-        boxes_to_keep = torchvision.ops.nms(top_boxes_i, recentered_top_scores_i, 0.6)
+        boxes_to_keep = torchvision.ops.nms(top_boxes_i, recentered_top_scores_i, 0.5)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]

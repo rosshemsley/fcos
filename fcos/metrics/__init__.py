@@ -1,1 +1,1 @@
-from .mean_average_precision import intersection_over_union, MAPConvention, mean_average_precision
+from .mean_average_precision import compute_iou, MAPConvention, compute_map
