@@ -55,7 +55,7 @@ Models are written to the same directory as the tensorboard logs for now, the de
 To test inference on the Cityscapes test set.
 
 ```
-$ fcos test
+$ fcos test \
     --cityscapes-dir <path/to/Cityscapes> \
     --model-checkpoint <path/to/checkpoint.chkpt> \
     --output ./output 
