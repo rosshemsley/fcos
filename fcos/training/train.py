@@ -70,47 +70,20 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             model.unfreeze_backbone()
 
         for train_idx, (x, class_labels, box_labels) in enumerate(train_loader, 0):
-            batch_size = x.shape[0]
-
             optimizer.zero_grad()
 
             x = x.to(device)
             batch = normalize_batch(x)
+            classes, centernesses, boxes = model(batch)
 
-            classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
-            (
-                class_targets_by_feature,
-                centerness_targets_by_feature,
-                box_targets_by_feature,
-            ) = generate_targets(x.shape, class_labels, box_labels, model.strides)
+            class_targets, centerness_targets, box_targets = generate_targets(
+                x.shape, class_labels, box_labels, model.strides
+            )
 
-            class_loss = torch.nn.CrossEntropyLoss()
-            box_loss = torch.nn.L1Loss()
-            centerness_loss = torch.nn.BCELoss()
+            loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
 
-            losses = []
-
-            for feature_idx in range(len(classes_by_feature)):
-                cls_target = class_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
-                centerness_target = centerness_targets_by_feature[feature_idx].to(device).view(batch_size, -1)
-                box_target = box_targets_by_feature[feature_idx].to(device).view(batch_size, -1, 4)
-
-                cls_view = classes_by_feature[feature_idx].view(batch_size, -1, len(model.classes))
-                box_view = boxes_by_feature[feature_idx].view(batch_size, -1, 4)
-                centerness_view = centerness_by_feature[feature_idx].view(batch_size, -1)
-
-                for batch_idx in range(batch_size):
-                    losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
-                    losses.append(centerness_loss(centerness_view, centerness_target))
-
-                    mask = cls_target[batch_idx] > 0
-                    if mask.nonzero().shape[0] > 0:
-                        losses.append(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0)
-
-            loss = torch.stack(losses).mean()
-
-            print(
-                "EPOCH:", epoch, "batch item i", train_idx, "of", len(train_loader), "LOSS", loss.item(),
+            logging.info(
+                f"Epoch: {epoch} batch {train_idx} of {len(train_loader)}, loss: {loss.item()}"
             )
 
             writer.add_scalar("Loss/train", loss.item(), train_idx)
@@ -131,6 +104,39 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
         scheduler.step()
 
 
+def _compute_loss(
+    classes, centernesses, boxes, class_targets, centerness_targets, box_targets
+) -> torch.Tensor:
+    batch_size = classes[0].shape[0]
+    num_classes = classes[0].shape[-1]
+
+    class_loss = torch.nn.CrossEntropyLoss()
+    box_loss = torch.nn.L1Loss()
+    centerness_loss = torch.nn.BCELoss()
+
+    losses = []
+    device = classes[0].device
+
+    for feature_idx in range(len(classes)):
+        cls_target = class_targets[feature_idx].to(device).view(batch_size, -1)
+        centerness_target = centerness_targets[feature_idx].to(device).view(batch_size, -1)
+        box_target = box_targets[feature_idx].to(device).view(batch_size, -1, 4)
+
+        cls_view = classes[feature_idx].view(batch_size, -1, num_classes)
+        box_view = boxes[feature_idx].view(batch_size, -1, 4)
+        centerness_view = centernesses[feature_idx].view(batch_size, -1)
+
+        for batch_idx in range(batch_size):
+            losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
+            losses.append(centerness_loss(centerness_view, centerness_target))
+
+            mask = cls_target[batch_idx] > 0
+            if mask.nonzero().shape[0] > 0:
+                losses.append(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0)
+
+    return torch.stack(losses).mean()
+
+
 def _test_model(checkpoint, writer, model, loader, device):
     images = []
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
@@ -144,6 +150,5 @@ def _test_model(checkpoint, writer, model, loader, device):
         render_detections_to_image(img, detections)
 
         writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
-
 
     writer.flush()
