@@ -1,1 +1,2 @@
-from .mean_average_precision import compute_iou, MAPConvention, compute_map
+from .map import compute_iou
+from .pascal_voc import compute_pasal_voc_metrics

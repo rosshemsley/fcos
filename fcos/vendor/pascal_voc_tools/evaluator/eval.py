@@ -1,85 +1,27 @@
-from typing import List, Optional, Set
+"""
+Note(Ross): This file has been vendored from pascal_voc_tools.
 
+https://github.com/wang-tf/pascal_voc_tools/blob/master/pascal_voc_tools/Evaluater/tools.py
+
+The shipped package has a number of heavy dependencies (matplotlib) that we do not need.
+"""
+
+"""
+@File : tools.py
+@Time : 2019/03/04 08:35:46
+@Author : wangtf
+@Version : 1.0
+@Desc : None
+"""
+
+# here put the import lib
+import os
+import glob
 import numpy as np
-from enum import Enum
-
-
-class MAPConvention:
-    AUC = 1
-    COCO_MAP = 2
-    PASCAL_VOC = 3
-
-
-def compute_iou(box_1: np.ndarray, box_2: np.ndarray) -> float:
-    """
-    Takes bounding boxes using the convention of [x_min, y_min, x_max, y_max]
-    """
-    x_min = max(box_1[0], box_2[0])
-    y_min = max(box_1[1], box_2[1])
-    x_max = min(box_1[2], box_2[2])
-    y_max = min(box_1[3], box_2[3])
-
-    if x_max < x_min or y_max < y_min:
-        return 0.0
-
-    intersection_area = (x_max - x_min) * (y_max - y_min)
-    area_1 = (box_1[2] - box_1[0]) * (box_1[3] - box_1[1])
-    area_2 = (box_2[2] - box_2[0]) * (box_2[3] - box_2[1])
-
-    return intersection_area / float(area_1 + area_2 - intersection_area)
-
-
-def compute_map(
-    iou_threshold: float,
-    ground_truth_boxes: List[np.ndarray],
-    predicted_scores: List[float],
-    predicted_boxes: List[np.ndarray],
-    convention: MAPConvention = MAPConvention.AUC,
-) -> float:
-
-    if convention is not MAPConvention.AUC:
-        raise NotImplementedError("only AUC convention mAP is implemented currently.")
-
-    classified_detections = []
-    matched_box_indices = set(range(len(ground_truth_boxes)))
-
-    for score, box in sorted(zip(predicted_scores, predicted_boxes), reverse=True)):
-        gt_index = _find_matching_box(
-            iou_threshold, ground_truth_boxes, box, matched_box_indices
-        )
-        if gt_index is not None:
-            classified_detections.append(True)
-            matched_box_indices.add(gt_index)
-        else:
-            classified_detections.append(False)
-
-    return compute_auc(len(ground_truth_boxes), classified_detections)
-
-
-def _find_matching_box(
-    iou_threshold: float, ground_truth_boxes: List[np.ndarray], box: np.ndarray, matched_box_indices: Set[int]
-) -> Optional[int]:
-
-    best_match = None
-    best_iou = 0.0
-
-    for i, gt_box in enumerate(ground_truth_boxes):
-        if i in matched_box_indices:
-            continue
-
-        iou = compute_iou(gt_box, box) 
-        if iou >= iou_threshold:
-            if best_match is None or iou > best_iou:
-                best_match = i
-                best_iou = iou
-
-    return best_match
 
 
 def voc_ap(recall, precision, use_07_metric=False):
     """
-    Note(Ross): Vendored from official repo
-
     ap = voc_ap(recall, precision, [use_07_metric])
     Compute VOC AP given precision and recall.
     If use_07_metric is true, uses  the
@@ -104,6 +46,7 @@ def voc_ap(recall, precision, use_07_metric=False):
     else:
         # correct AP calculation
         # first append sentinel values at the end
+        mrec = np.concatenate(([0.], recall, [1.]))
         mpre = np.concatenate(([0.], precision, [0.]))
 
         # compute the precision envelope
@@ -149,8 +92,6 @@ def compute_overlaps(boxes, one_box):
 
     return iou
 
-def new_voc_eval(ground_truth_boxes: List[List[np.ndarray]], boxes: List[List[np.ndarray]], iou_threshold):
-    ...
 
 def voc_eval(class_recs: dict,
              detect: dict,
@@ -245,3 +186,67 @@ def voc_eval(class_recs: dict,
     result['average_precision'] = average_precision
     return result
 
+
+def voc_eval_files(class_recs_dir,
+                   detect_file,
+                   label_id,
+                   iou_thresh=0.5,
+                   use_07_metric=False):
+    """
+    recall, precision, ap = voc_eval(class_recs, detection,
+                                [iou_thresh],
+                                [use_07_metric])
+    Top level function that does the PASCAL VOC evaluation.
+    Please make sure that the class_recs only have one class annotations.
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    Args:
+        class_recalls: recalls dict of a class
+            class_recs[image_name]={'bbox': []}.
+        detection: Path to annotations
+            detection={'image_ids':[], bbox': [], 'confidence':[]}.
+        [iou_thresh]: Overlap threshold (default = 0.5)
+        [use_07_metric]: Whether to use VOC07's 11 point AP computation
+            (default False)
+    Returns:
+        a dict of result including true_positive_number, false_positive_number,
+        recall, precision and average_precision.
+    Raises:
+        IOError: can not find the path.
+    """
+    if not os.path.exists(class_recs_dir):
+        raise IOError
+    if not os.path.exists(detect_file):
+        raise IOError
+
+    class_recs = {}
+    recs_list = glob.glob(os.path.join(class_recs_dir, '*.txt'))
+    for path in recs_list:
+        image_id = os.path.basename(path)[:-4]
+        with open(path) as f:
+            data = f.read().strip().split('\n')
+            bboxes = []
+            for line in data:
+                label, xmin, ymin, xmax, ymax = line.strip().split(' ')
+                if label == str(label_id):
+                    bboxes.append([xmin, ymin, xmax, ymax])
+            bboxes = np.array(bboxes)
+            class_recs[image_id] = {'bbox': bboxes}
+
+    detection = {'image_ids': [], 'bbox': [], 'confidence': []}
+    with open(detect_file) as f:
+        data = f.read().strip().split('\n')
+        for line in data:
+            image_id, confidence, xmin, ymin, xmax, ymax = line.strip().split()
+            detection['image_ids'].append(image_id)
+            detection['confidence'].append(confidence)
+            detection['bbox'].append([xmin, ymin, xmax, ymax])
+    detection['image_ids'] = np.array(detection['image_ids'])
+    detection['confidence'] = np.array(detection['confidence'])
+    detection['bbox'] = np.array(detection['bbox'])
+
+    result = voc_eval(class_recs,
+                      detection,
+                      iou_thresh=iou_thresh,
+                      use_07_metric=use_07_metric)
+    return result
