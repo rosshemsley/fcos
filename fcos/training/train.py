@@ -1,10 +1,10 @@
 import pathlib
 import os
-
-import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 import logging
 
+from typing import List
+import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
@@ -26,12 +26,14 @@ from torchvision.transforms import (
 
 from fcos.datasets import tensor_to_image, collate_fn, CityscapesData, Split
 from fcos.inference import (
+    Detection,
     compute_detections_for_tensor,
     render_detections_to_image,
     detections_from_net,
     detections_from_network_output,
 )
 from fcos.models import FCOS, normalize_batch
+from fcos.metrics import compute_pascal_voc_metrics
 
 from .targets import generate_targets
 
@@ -98,7 +100,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             loss.backward()
             optimizer.step()
 
-            if batch_index % 100 == 0:
+            if batch_index % 300 == 0:
                 logger.info("Running validation...")
 
                 with torch.no_grad():
@@ -152,8 +154,12 @@ def _compute_loss(
 def _test_model(checkpoint, writer, model, loader, device):
     model.eval()
 
+    all_detections = []
+    all_box_labels = []
+    all_class_labels = []
+
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
-        if i == 10:
+        if i == 20:
             break
 
         logging.info(f"Validation for {i}")
@@ -176,4 +182,47 @@ def _test_model(checkpoint, writer, model, loader, device):
         writer.add_scalar("Loss/val", loss.item(), checkpoint)
         writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
 
+        all_detections.extend(detections)
+        all_box_labels.extend(box_labels)
+        all_class_labels.extend(class_labels)
+
+    metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)
+    logging.info(f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}")
+    writer.add_scalar("Metrics/mAP", metrics.mean_average_precision, checkpoint)
+
+
     writer.flush()
+
+
+def _compute_metrics(detections: List[List[Detection]], class_labels: List[torch.Tensor], box_labels: List[torch.tensor]):
+    # TODO(Ross): support multiple classes
+    ground_truth_boxes_by_image = []
+    predicted_boxes_by_image = []
+    predicted_scores_by_image = []
+
+    for img_detections, img_class_labels, img_box_labels in zip(detections, class_labels, box_labels):
+        predicted_boxes = []
+        predicted_scores = []
+        gt_boxes = []
+
+        for detection in img_detections:
+            predicted_boxes.append(detection.bbox)
+            predicted_scores.append(detection.score)
+        
+        for box_label in box_labels:
+            for i in range(box_label.shape[0]):
+                gt_boxes.append(box_label[i,:].numpy())
+
+        ground_truth_boxes_by_image.append(gt_boxes)
+        predicted_boxes_by_image.append(predicted_boxes)
+        predicted_scores_by_image.append(predicted_scores)
+
+    return compute_pascal_voc_metrics(ground_truth_boxes_by_image, predicted_boxes_by_image, predicted_scores_by_image)
+
+
+
+# def compute_pasal_voc_metrics(
+#     ground_truth_boxes_by_image: List[List[np.ndarray]],
+#     predicted_boxes_by_image: List[List[np.ndarray]],
+#     predicted_scores_by_image: List[List[float]],
+#     iou_threshold=0.5,

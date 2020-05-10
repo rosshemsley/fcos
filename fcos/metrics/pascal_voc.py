@@ -14,7 +14,7 @@ class PascalVOCMetrics:
     mean_average_precision: float
 
 
-def compute_pasal_voc_metrics(
+def compute_pascal_voc_metrics(
     ground_truth_boxes_by_image: List[List[np.ndarray]],
     predicted_boxes_by_image: List[List[np.ndarray]],
     predicted_scores_by_image: List[List[float]],
