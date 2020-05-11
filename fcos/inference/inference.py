@@ -87,7 +87,7 @@ def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) 
                     bbox=boxes[i].cpu().numpy().astype(int),
                 )
                 for i in range(boxes.shape[0])
-                if classes[i] != 0
+                if classes[i] != 0 and scores[i].item() > 0.05
             ]
         )
 
@@ -120,8 +120,8 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
 
-        recentered_top_scores_i = top_scores_i.mul(top_centernesses_i)
-        boxes_to_keep = torchvision.ops.nms(top_boxes_i, recentered_top_scores_i, 0.5)
+        top_scores_i = top_scores_i.mul(top_centernesses_i)
+        boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.5)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]

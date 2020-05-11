@@ -184,7 +184,6 @@ def _test_model(checkpoint, writer, model, loader, device):
         logging.info(f"Validation loss: {loss.item()}")
 
         writer.add_scalar("Loss/val", loss.item(), checkpoint)
-        # writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
 
         images.append(img)
         all_detections.extend(detections)
@@ -246,7 +245,6 @@ def _image_grid(images: List[np.ndarray], images_per_row: int, image_width: int)
 
     for i, img in enumerate(images):
         resized_image = cv2.resize(img, (int(img.shape[1] * rescale), int(img.shape[0] * rescale)))
-        print(resized_image.shape, result.shape)
 
         r, c = divmod(i, images_per_row)
         c *= max_image_width
