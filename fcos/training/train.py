@@ -2,6 +2,8 @@ import pathlib
 import os
 import logging
 
+import cv2
+import math
 from typing import List
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -158,8 +160,10 @@ def _test_model(checkpoint, writer, model, loader, device):
     all_box_labels = []
     all_class_labels = []
 
+    images = []
+
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
-        if i == 20:
+        if i == 12:
             break
 
         logging.info(f"Validation for {i}")
@@ -180,21 +184,28 @@ def _test_model(checkpoint, writer, model, loader, device):
         logging.info(f"Validation loss: {loss.item()}")
 
         writer.add_scalar("Loss/val", loss.item(), checkpoint)
-        writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
+        # writer.add_image(f"fcos test {i}", img, checkpoint, dataformats="HWC")
 
+        images.append(img)
         all_detections.extend(detections)
         all_box_labels.extend(box_labels)
         all_class_labels.extend(class_labels)
 
-    metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)
-    logging.info(f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}")
-    writer.add_scalar("Metrics/mAP", metrics.mean_average_precision, checkpoint)
+    grid = _image_grid(images, 3, 2048)
+    writer.add_image(f"fcos test {i}", grid, checkpoint, dataformats="HWC")
 
+    metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)
+    logging.info(
+        f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}"
+    )
+    writer.add_scalar("Metrics/mAP", metrics.mean_average_precision, checkpoint)
 
     writer.flush()
 
 
-def _compute_metrics(detections: List[List[Detection]], class_labels: List[torch.Tensor], box_labels: List[torch.tensor]):
+def _compute_metrics(
+    detections: List[List[Detection]], class_labels: List[torch.Tensor], box_labels: List[torch.tensor]
+):
     # TODO(Ross): support multiple classes
     ground_truth_boxes_by_image = []
     predicted_boxes_by_image = []
@@ -208,21 +219,42 @@ def _compute_metrics(detections: List[List[Detection]], class_labels: List[torch
         for detection in img_detections:
             predicted_boxes.append(detection.bbox)
             predicted_scores.append(detection.score)
-        
+
         for box_label in box_labels:
             for i in range(box_label.shape[0]):
-                gt_boxes.append(box_label[i,:].numpy())
+                gt_boxes.append(box_label[i, :].numpy())
 
         ground_truth_boxes_by_image.append(gt_boxes)
         predicted_boxes_by_image.append(predicted_boxes)
         predicted_scores_by_image.append(predicted_scores)
 
-    return compute_pascal_voc_metrics(ground_truth_boxes_by_image, predicted_boxes_by_image, predicted_scores_by_image)
+    return compute_pascal_voc_metrics(
+        ground_truth_boxes_by_image, predicted_boxes_by_image, predicted_scores_by_image
+    )
 
 
+def _image_grid(images: List[np.ndarray], images_per_row: int, image_width: int) -> np.ndarray:
+    max_image_width = int(image_width / images_per_row)
+    images_per_col = int(math.ceil(len(images) / images_per_row))
 
-# def compute_pasal_voc_metrics(
-#     ground_truth_boxes_by_image: List[List[np.ndarray]],
-#     predicted_boxes_by_image: List[List[np.ndarray]],
-#     predicted_scores_by_image: List[List[float]],
-#     iou_threshold=0.5,
+    rescale = min(max_image_width / image.shape[1] for image in images)
+
+    max_height = max(int(image.shape[0] * rescale) for image in images)
+
+    image_height = images_per_col * max_height
+    result = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+
+    for i, img in enumerate(images):
+        resized_image = cv2.resize(img, (int(img.shape[1] * rescale), int(img.shape[0] * rescale)))
+        print(resized_image.shape, result.shape)
+
+        r, c = divmod(i, images_per_row)
+        c *= max_image_width
+        r *= max_height
+
+        h = resized_image.shape[0]
+        w = resized_image.shape[1]
+
+        result[r : r + h, c : c + w] = resized_image
+
+    return result

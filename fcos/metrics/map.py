@@ -67,7 +67,7 @@ def compute_iou(box_1: np.ndarray, box_2: np.ndarray) -> float:
 #         if i in matched_box_indices:
 #             continue
 
-#         iou = compute_iou(gt_box, box) 
+#         iou = compute_iou(gt_box, box)
 #         if iou >= iou_threshold:
 #             if best_match is None or iou > best_iou:
 #                 best_match = i

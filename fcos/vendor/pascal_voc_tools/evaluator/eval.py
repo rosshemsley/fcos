@@ -36,18 +36,18 @@ def voc_ap(recall, precision, use_07_metric=False):
     """
     if use_07_metric:
         # 11 point metric
-        ap = 0.
-        for t in np.arange(0., 1.1, 0.1):
+        ap = 0.0
+        for t in np.arange(0.0, 1.1, 0.1):
             if np.sum(recall >= t) == 0:
                 p = 0
             else:
                 p = np.max(precision[recall >= t])
-            ap = ap + p / 11.
+            ap = ap + p / 11.0
     else:
         # correct AP calculation
         # first append sentinel values at the end
-        mrec = np.concatenate(([0.], recall, [1.]))
-        mpre = np.concatenate(([0.], precision, [0.]))
+        mrec = np.concatenate(([0.0], recall, [1.0]))
+        mpre = np.concatenate(([0.0], precision, [0.0]))
 
         # compute the precision envelope
         for i in range(mpre.size - 1, 0, -1):
@@ -79,24 +79,19 @@ def compute_overlaps(boxes, one_box):
     iymin = np.maximum(boxes[:, 1], one_box[1])
     ixmax = np.minimum(boxes[:, 2], one_box[2])
     iymax = np.minimum(boxes[:, 3], one_box[3])
-    iw = np.maximum(ixmax - ixmin + 1., 0.)
-    ih = np.maximum(iymax - iymin + 1., 0.)
+    iw = np.maximum(ixmax - ixmin + 1.0, 0.0)
+    ih = np.maximum(iymax - iymin + 1.0, 0.0)
     inters = iw * ih
 
     # union
-    boxes_area = (boxes[:, 2] - boxes[:, 0] + 1.) * (boxes[:, 3] -
-                                                     boxes[:, 1] + 1.)
-    one_box_area = (one_box[2] - one_box[0] + 1.) * (one_box[3] - one_box[1] +
-                                                     1.)
+    boxes_area = (boxes[:, 2] - boxes[:, 0] + 1.0) * (boxes[:, 3] - boxes[:, 1] + 1.0)
+    one_box_area = (one_box[2] - one_box[0] + 1.0) * (one_box[3] - one_box[1] + 1.0)
     iou = inters / (one_box_area + boxes_area - inters)
 
     return iou
 
 
-def voc_eval(class_recs: dict,
-             detect: dict,
-             iou_thresh: float = 0.5,
-             use_07_metric: bool = False):
+def voc_eval(class_recs: dict, detect: dict, iou_thresh: float = 0.5, use_07_metric: bool = False):
     """
     recall, precision, ap = voc_eval(class_recs, detection,
                                 [iou_thresh],
@@ -123,16 +118,16 @@ def voc_eval(class_recs: dict,
     # class_rec data load
     npos = 0
     for imagename in class_recs.keys():
-        if not isinstance(class_recs[imagename]['bbox'], np.ndarray):
+        if not isinstance(class_recs[imagename]["bbox"], np.ndarray):
             raise TypeError
-        detected_num = class_recs[imagename]['bbox'].shape[0]
+        detected_num = class_recs[imagename]["bbox"].shape[0]
         npos += detected_num
-        class_recs[imagename]['det'] = [False] * detected_num
+        class_recs[imagename]["det"] = [False] * detected_num
 
     # detections data load
-    image_ids = detect['image_ids']
-    confidence = detect['confidence']
-    BB = detect['bbox']
+    image_ids = detect["image_ids"]
+    confidence = detect["confidence"]
+    BB = detect["bbox"]
     if not isinstance(confidence, np.ndarray):
         raise TypeError
     if not isinstance(BB, np.ndarray):
@@ -151,7 +146,7 @@ def voc_eval(class_recs: dict,
         R = class_recs[image_ids[d]]
         bb = BB[d, :].astype(float)
         iou_max = -np.inf
-        BBGT = R['bbox'].astype(float)
+        BBGT = R["bbox"].astype(float)
 
         if BBGT.size > 0:
             overlaps = compute_overlaps(BBGT, bb)
@@ -159,13 +154,13 @@ def voc_eval(class_recs: dict,
             iou_max_index = np.argmax(overlaps)
 
         if iou_max > iou_thresh:
-            if not R['det'][iou_max_index]:
-                tp[d] = 1.
-                R['det'][iou_max_index] = 1
+            if not R["det"][iou_max_index]:
+                tp[d] = 1.0
+                R["det"][iou_max_index] = 1
             else:
-                fp[d] = 1.
+                fp[d] = 1.0
         else:
-            fp[d] = 1.
+            fp[d] = 1.0
 
     # compute precision recall
     fp = np.cumsum(fp)
@@ -179,19 +174,15 @@ def voc_eval(class_recs: dict,
     average_precision = voc_ap(recall, precision, use_07_metric)
 
     result = {}
-    result['true_positive_number'] = true_positive_number
-    result['false_positive_number'] = false_positive_number
-    result['recall'] = recall
-    result['precision'] = precision
-    result['average_precision'] = average_precision
+    result["true_positive_number"] = true_positive_number
+    result["false_positive_number"] = false_positive_number
+    result["recall"] = recall
+    result["precision"] = precision
+    result["average_precision"] = average_precision
     return result
 
 
-def voc_eval_files(class_recs_dir,
-                   detect_file,
-                   label_id,
-                   iou_thresh=0.5,
-                   use_07_metric=False):
+def voc_eval_files(class_recs_dir, detect_file, label_id, iou_thresh=0.5, use_07_metric=False):
     """
     recall, precision, ap = voc_eval(class_recs, detection,
                                 [iou_thresh],
@@ -220,33 +211,30 @@ def voc_eval_files(class_recs_dir,
         raise IOError
 
     class_recs = {}
-    recs_list = glob.glob(os.path.join(class_recs_dir, '*.txt'))
+    recs_list = glob.glob(os.path.join(class_recs_dir, "*.txt"))
     for path in recs_list:
         image_id = os.path.basename(path)[:-4]
         with open(path) as f:
-            data = f.read().strip().split('\n')
+            data = f.read().strip().split("\n")
             bboxes = []
             for line in data:
-                label, xmin, ymin, xmax, ymax = line.strip().split(' ')
+                label, xmin, ymin, xmax, ymax = line.strip().split(" ")
                 if label == str(label_id):
                     bboxes.append([xmin, ymin, xmax, ymax])
             bboxes = np.array(bboxes)
-            class_recs[image_id] = {'bbox': bboxes}
+            class_recs[image_id] = {"bbox": bboxes}
 
-    detection = {'image_ids': [], 'bbox': [], 'confidence': []}
+    detection = {"image_ids": [], "bbox": [], "confidence": []}
     with open(detect_file) as f:
-        data = f.read().strip().split('\n')
+        data = f.read().strip().split("\n")
         for line in data:
             image_id, confidence, xmin, ymin, xmax, ymax = line.strip().split()
-            detection['image_ids'].append(image_id)
-            detection['confidence'].append(confidence)
-            detection['bbox'].append([xmin, ymin, xmax, ymax])
-    detection['image_ids'] = np.array(detection['image_ids'])
-    detection['confidence'] = np.array(detection['confidence'])
-    detection['bbox'] = np.array(detection['bbox'])
+            detection["image_ids"].append(image_id)
+            detection["confidence"].append(confidence)
+            detection["bbox"].append([xmin, ymin, xmax, ymax])
+    detection["image_ids"] = np.array(detection["image_ids"])
+    detection["confidence"] = np.array(detection["confidence"])
+    detection["bbox"] = np.array(detection["bbox"])
 
-    result = voc_eval(class_recs,
-                      detection,
-                      iou_thresh=iou_thresh,
-                      use_07_metric=use_07_metric)
+    result = voc_eval(class_recs, detection, iou_thresh=iou_thresh, use_07_metric=use_07_metric)
     return result

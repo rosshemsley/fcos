@@ -5,6 +5,7 @@ import numpy as np
 
 from fcos.vendor.pascal_voc_tools.evaluator import voc_eval
 
+
 @dataclass
 class PascalVOCMetrics:
     true_positive_count: int
@@ -20,7 +21,11 @@ def compute_pascal_voc_metrics(
     predicted_scores_by_image: List[List[float]],
     iou_threshold=0.5,
 ) -> Dict[str, float]:
-    if not len(ground_truth_boxes_by_image) == len(predicted_boxes_by_image) == len(predicted_scores_by_image):
+    if (
+        not len(ground_truth_boxes_by_image)
+        == len(predicted_boxes_by_image)
+        == len(predicted_scores_by_image)
+    ):
         raise ValueError("expect same number of entries for each list")
 
     image_index_to_gt_boxes: Dict[int, np.ndarray] = {}
@@ -28,7 +33,7 @@ def compute_pascal_voc_metrics(
     for i, gt_boxes_for_image in enumerate(ground_truth_boxes_by_image):
         all_boxes = np.zeros((len(gt_boxes_for_image), 4))
         for j, box in enumerate(gt_boxes_for_image):
-            all_boxes[j,:] = box
+            all_boxes[j, :] = box
         image_index_to_gt_boxes[i] = dict(bbox=all_boxes)
 
     all_image_indices = []
@@ -54,9 +59,7 @@ def compute_pascal_voc_metrics(
         )
 
     detections = dict(
-        image_ids=np.stack(all_image_indices),
-        bbox=np.stack(all_boxes),
-        confidence=np.stack(all_scores),
+        image_ids=np.stack(all_image_indices), bbox=np.stack(all_boxes), confidence=np.stack(all_scores),
     )
 
     dct = voc_eval(image_index_to_gt_boxes, detections, iou_threshold)
