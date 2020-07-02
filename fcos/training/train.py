@@ -53,7 +53,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
 
     train_loader = DataLoader(
         CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
-        batch_size=3,
+        batch_size=4,
         shuffle=True,
         num_workers=2,
         collate_fn=collate_fn,
@@ -71,6 +71,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     checkpoint = 0
 
     learning_rate = 1e-4
+    # optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.1)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     logger.info("Freezing backbone network")
@@ -102,7 +103,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             loss.backward()
             optimizer.step()
 
-            if batch_index % 300 == 0:
+            if batch_index % 100 == 0:
                 logger.info("Running validation...")
 
                 with torch.no_grad():
@@ -142,13 +143,25 @@ def _compute_loss(
         box_view = boxes[feature_idx].view(batch_size, -1, 4)
         centerness_view = centernesses[feature_idx].view(batch_size, -1)
 
-        for batch_idx in range(batch_size):
-            losses.append(class_loss(cls_view[batch_idx], cls_target[batch_idx]))
-            losses.append(centerness_loss(centerness_view, centerness_target))
+        losses.append(centerness_loss(centerness_view, centerness_target))
+        # print("CLS size", cls_view.shape, "target shape", cls_target.shape)
+        ls = class_loss(cls_view.view(-1, num_classes), cls_target.view(-1))
+        losses.append(ls)
 
+        for batch_idx in range(batch_size):
             mask = cls_target[batch_idx] > 0
-            if mask.nonzero().shape[0] > 0:
-                losses.append(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) / 50.0)
+            # if mask.nonzero().sum() == 0:
+                # print("no weight")
+                # continue
+            # else:
+                # print("yes weight")
+            # print("non zero", mask.nonzero().sum())
+            # print("class loss", ls)
+
+            if mask.nonzero().sum() > 0:
+                l = torch.log(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]))
+                print("box loss", l.item())
+                losses.append(l)
 
     return torch.stack(losses).mean()
 
@@ -173,12 +186,20 @@ def _test_model(checkpoint, writer, model, loader, device):
         x = normalize_batch(x)
 
         classes, centernesses, boxes = model(x)
-        detections = detections_from_network_output(classes, centernesses, boxes)
+        img_height, img_width = x.shape[2:4]
+        detections = detections_from_network_output(img_height, img_width, classes, centernesses, boxes, model.strides)
         render_detections_to_image(img, detections[0])
 
         class_targets, centerness_targets, box_targets = generate_targets(
             x.shape, class_labels, box_labels, model.strides
         )
+
+        # print(centerness_targets[0][0].shape)
+        writer.add_image(f"class {i}", classes[0][0][:,:,1], checkpoint, dataformats="HW")
+        # writer.add_image(f"class target {i}", class_targets[0][0], checkpoint, dataformats="HW")
+
+        writer.add_image(f"centerness {i}", centernesses[0][0], checkpoint, dataformats="HW")
+
 
         loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
         logging.info(f"Validation loss: {loss.item()}")

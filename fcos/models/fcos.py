@@ -34,29 +34,57 @@ class FCOS(nn.Module):
 
         self.classification_head = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
+            # nn.BatchNorm2d(256),
         )
 
-        self.classification_to_class = nn.Conv2d(256, len(CLASSES), kernel_size=3, padding=1)
-        self.classification_to_centerness = nn.Conv2d(256, 1, kernel_size=3, padding=1)
+        self.classification_to_class = nn.Sequential(
+            nn.Conv2d(256, len(CLASSES), kernel_size=3, padding=1),
+            # nn.ReLU(inplace=True),
+        )
+
+        self.classification_to_centerness = nn.Sequential(
+            nn.Conv2d(256, 1, kernel_size=3, padding=1),
+            # nn.ReLU(inplace=True),
+        )
 
         self.regression_head = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.GroupNorm(32, 256),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 4, kernel_size=3, padding=1),
         )
+
+        for modules in [self.regression_head, self.classification_to_centerness,
+                        self.classification_to_class, self.classification_head,
+                        self.layer_1_to_p3,
+                        self.layer_2_to_p4,
+                        self.layer_3_to_p5,
+                        self.p5_to_p6,
+                        self.p6_to_p7]:
+            for l in modules.modules():
+                if isinstance(l, nn.Conv2d):
+                    torch.nn.init.normal_(l.weight, std=0.01)
+                    torch.nn.init.constant_(l.bias, 0)
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -93,27 +121,24 @@ class FCOS(nn.Module):
 
         classes_by_feature = []
         centerness_by_feature = []
-        boxes_by_feature = []
+        reg_by_feature = []
 
         for scale, stride, feature in zip(self.scales, self.strides, feature_pyramid):
             classification = self.classification_head(feature)
-            classes = self.classification_to_class(classification)
-            centerness = self.classification_to_centerness(classification)
-            reg = self.regression_head(feature)
+            classes = self.classification_to_class(classification).sigmoid()
+            centerness = self.classification_to_centerness(classification).sigmoid()
+            reg = torch.exp(self.regression_head(feature))
 
             # B[C]HW  -> BHW[C]
             classes = classes.permute(0, 2, 3, 1).contiguous()
-            centerness = centerness.permute(0, 2, 3, 1).contiguous()
+            centerness = centerness.permute(0, 2, 3, 1).contiguous().squeeze()
             reg = reg.permute(0, 2, 3, 1).contiguous()
 
-            boxes = _boxes_from_regression(reg, img_height, img_width, scale, stride)
-            centerness = centerness.clamp(0.0, 1.0)
-
-            boxes_by_feature.append(boxes)
+            reg_by_feature.append(reg)
             centerness_by_feature.append(centerness)
             classes_by_feature.append(classes)
 
-        return classes_by_feature, centerness_by_feature, boxes_by_feature
+        return classes_by_feature, centerness_by_feature, reg_by_feature
 
 
 def normalize_batch(x: torch.FloatTensor) -> torch.FloatTensor:
@@ -130,30 +155,6 @@ def normalize_batch(x: torch.FloatTensor) -> torch.FloatTensor:
 
     return x
 
-
-def _boxes_from_regression(reg, img_height, img_width, scale, stride):
-    """
-    Returns B[x_min, y_min, x_max, y_max], in image space, given regression
-    values, which represent offests (left, top, right, bottom).
-    """
-    # Note(Ross): we square to ensure all values are positive
-    reg = torch.pow(reg * scale, 2)
-    half_stride = stride / 2.0
-    _, rows, cols, _ = reg.shape
-
-    y = torch.linspace(half_stride, img_height - half_stride, rows).to(reg.device)
-    x = torch.linspace(half_stride, img_width - half_stride, cols).to(reg.device)
-
-    center_y, center_x = torch.meshgrid(y, x)
-    center_y = center_y.squeeze(0)
-    center_x = center_x.squeeze(0)
-
-    x_min = center_x - reg[:, :, :, 0]
-    y_min = center_y - reg[:, :, :, 1]
-    x_max = center_x + reg[:, :, :, 2]
-    y_max = center_y + reg[:, :, :, 3]
-
-    return torch.stack([x_min, y_min, x_max, y_max], dim=3)
 
 
 def _upsample(x):

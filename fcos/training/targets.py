@@ -22,52 +22,77 @@ def generate_targets(
     centerness_target_by_feature = []
     box_targets_by_feature = []
 
+    m = (0, 64, 128, 256, 512, math.inf)
+
     for i, stride in enumerate(strides):
-        h = int(img_shape[2] / stride)
-        w = int(img_shape[3] / stride)
+        h = img_shape[2]
+        w = img_shape[3]
 
-        class_target_for_feature = torch.zeros(batch_size, h, w, dtype=int)
-        centerness_target_for_feature = torch.zeros(batch_size, h, w)
-        box_target_for_feature = torch.zeros(batch_size, h, w, 4)
+        feat_h = int(img_shape[2] / stride)
+        feat_w = int(img_shape[3] / stride)  
+        # h = int(img_shape[2] / stride)
+        # w = int(img_shape[3] / stride)
 
-        min_box_side = 0 if i == 0 else strides[i - 1]
-        max_box_side = math.inf if i == len(strides) - 1 else stride
+        class_target_for_feature = torch.zeros(batch_size, feat_h, feat_w, dtype=int)
+        centerness_target_for_feature = torch.zeros(batch_size, feat_h, feat_w)
+        box_target_for_feature = torch.zeros(batch_size, feat_h, feat_w, 4)
 
+        min_box_side = m[i]
+        max_box_side = m[i+1]
+        # print(stride, min_box_side, max_box_side)
+
+        # print(f"for {i}, stride is {stride}, size is {img_shape}, max width is {max_box_side}, min width is {min_box_side}")
         for batch_idx, (class_labels, box_labels) in enumerate(
             zip(class_labels_by_batch, box_labels_by_batch)
         ):
-            heights = box_labels[:, 2] - box_labels[:, 0]
-            widths = box_labels[:, 3] - box_labels[:, 1]
+            heights = box_labels[:, 3] - box_labels[:, 1]
+            widths = box_labels[:, 2] - box_labels[:, 0]
             areas = torch.mul(widths, heights)
 
             for j in torch.argsort(areas, dim=0, descending=True):
-                min_x = int(box_labels[j][0] / stride)
-                min_y = int(box_labels[j][1] / stride)
-                max_x = int(box_labels[j][2] / stride) + 1
-                max_y = int(box_labels[j][3] / stride) + 1
-
-                for x in range(min_x, max_x):
-                    for y in range(min_y, max_y):
-                        dist_l = x - min_x
-                        dist_r = max_x - x
-                        dist_t = y - min_y
-                        dist_b = max_y - y
-
-                        centerness = math.sqrt(
-                            min(dist_l, dist_r)
-                            / max(dist_l, dist_r)
-                            * min(dist_t, dist_b)
-                            / max(dist_t, dist_b)
-                        )
-                        centerness_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = centerness
-
                 if heights[j] < min_box_side or heights[j] > max_box_side:
                     continue
                 if widths[j] < min_box_side or widths[j] > max_box_side:
                     continue
 
+                min_x = max(int(box_labels[j][0] / stride), 0)
+                min_y = max(int(box_labels[j][1] / stride), 0)
+                max_x = min(int(box_labels[j][2] / stride) + 1, feat_w)
+                max_y = min(int(box_labels[j][3] / stride) + 1, feat_h)
+
+                mid_x = (max_x + min_x) / 2.0
+                mid_y = (max_y + min_y) / 2.0
+                b_w = max_x - min_x
+                b_h = max_y - min_y
+                for x in range(min_x, max_x):
+                    for y in range(min_y, max_y):
+
+                        dy = mid_y - y
+                        dx = mid_x - x
+
+                        dist = math.exp(-(dy*dy /b_h  + dx * dx / b_w ))
+
+                        centerness = dist
+                        # centerness = 1
+                        if y < 0 or x < 0 or y >= centerness_target_for_feature[batch_idx].shape[0] or x >= centerness_target_for_feature[batch_idx].shape[1]:
+                            continue
+                        centerness_target_for_feature[batch_idx, y, x] = max(centerness, centerness_target_for_feature[batch_idx, y, x])
+
                 class_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = class_labels[j]
-                box_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = box_labels[j]
+                
+                for x in range(min_x, max_x):
+                    for y in range(min_y, max_y):
+                        x_img = x * stride
+                        y_img = y * stride
+                        # print("stride", stride, f"w:{w* stride}, h: {h* stride}", f"miny: {min_y * stride}, maxy: {max_y* stride}",  "img pos", x_img, y_img, "box:", box_labels[j])
+                        target = torch.Tensor([
+                            float(x_img - box_labels[j][0]),
+                            float(y_img - box_labels[j][1]),
+                            float(box_labels[j][2] - x_img) ,
+                            float(box_labels[j][3] - y_img),
+                        ])
+                        # print("target", target)
+                        box_target_for_feature[batch_idx, y, x] = target
 
         class_targets_by_feature.append(class_target_for_feature)
         centerness_target_by_feature.append(centerness_target_for_feature)

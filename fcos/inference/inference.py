@@ -45,18 +45,21 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
         classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
 
 
-def detections_from_network_output(classes, centernesses, boxes):
+def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, strides):
     all_classes = []
     all_centernesses = []
     all_boxes = []
 
+    # print("height, width:", img_height, img_width)
     n_classes = classes[0].shape[-1]
     batch_size = classes[0].shape[0]
 
-    for feat_classes, feat_centernesses, feat_boxes in zip(classes, centernesses, boxes):
+    for feat_classes, feat_centernesses, feat_boxes, stride in zip(classes, centernesses, boxes, strides):
+        boxes = _boxes_from_regression(feat_boxes, img_height, img_width, 1.0, stride)
+
         all_classes.append(feat_classes.view(batch_size, -1, n_classes))
         all_centernesses.append(feat_centernesses.view(batch_size, -1))
-        all_boxes.append(feat_boxes.view(batch_size, -1, 4))
+        all_boxes.append(boxes.view(batch_size, -1, 4))
 
     classes_ = torch.cat(all_classes, dim=1)
     centernesses_ = torch.cat(all_centernesses, dim=1)
@@ -64,6 +67,32 @@ def detections_from_network_output(classes, centernesses, boxes):
 
     gathered_boxes, gathered_classes, gathered_scores = _gather_detections(classes_, centernesses_, boxes_)
     return detections_from_net(gathered_boxes, gathered_classes, gathered_scores)
+
+
+def _boxes_from_regression(reg, img_height, img_width, scale, stride):
+    """
+    Returns B[x_min, y_min, x_max, y_max], in image space, given regression
+    values, which represent offests (left, top, right, bottom).
+    """
+    half_stride = stride / 2.0
+    _, rows, cols, _ = reg.shape
+
+    y = torch.linspace(half_stride, img_height - half_stride, rows).to(reg.device)
+    x = torch.linspace(half_stride, img_width - half_stride, cols).to(reg.device)
+
+    center_y, center_x = torch.meshgrid(y, x)
+    center_y = center_y.squeeze(0)
+    center_x = center_x.squeeze(0)
+    # reg[:,:,:,:] = 5
+
+    x_min = center_x - reg[:, :, :, 0]
+    y_min = center_y - reg[:, :, :, 1]
+    x_max = center_x + reg[:, :, :, 2]
+    y_max = center_y + reg[:, :, :, 3]
+
+    return torch.stack([x_min, y_min, x_max, y_max], dim=3)
+
+
 
 
 def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) -> List[List[Detection]]:
@@ -87,7 +116,7 @@ def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) 
                     bbox=boxes[i].cpu().numpy().astype(int),
                 )
                 for i in range(boxes.shape[0])
-                if classes[i] != 0 and scores[i].item() > 0.05
+                if classes[i] != 0
             ]
         )
 
@@ -96,7 +125,7 @@ def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) 
 
 def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_DETECTIONS):
     # classes: BHW[c] class index of each box
-    class_scores, class_indices = torch.max(classes.sigmoid(), dim=2)
+    class_scores, class_indices = torch.max(classes, dim=2)
 
     boxes_by_batch = []
     classes_by_batch = []
@@ -112,16 +141,25 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         centerness_i = centernesses[i][non_background_points]
         class_indices_i = class_indices[i][non_background_points]
 
+        class_scores_i = class_scores_i.mul(centerness_i)
+
+
+        non_minimal_points = class_scores_i > 0.05
+
+        class_scores_i = class_scores_i[non_minimal_points]
+        boxes_i = boxes_i[non_minimal_points]
+        centerness_i = centerness_i[non_minimal_points]
+        class_indices_i = class_indices_i[non_minimal_points]
+
+
         num_detections = min(class_scores_i.shape[0], max_detections)
         _, top_detection_indices = torch.topk(class_scores_i, num_detections, dim=0)
 
-        top_centernesses_i = torch.index_select(centerness_i, 0, top_detection_indices)
         top_boxes_i = torch.index_select(boxes_i, 0, top_detection_indices)
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
 
-        top_scores_i = top_scores_i.mul(top_centernesses_i)
-        boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.5)
+        boxes_to_keep =  torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]
