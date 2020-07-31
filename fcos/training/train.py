@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     val_loader = DataLoader(
-        CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
+        CityscapesData(Split.VALIDATE, cityscapes_dir, image_transforms=[Resize(512)]),
         batch_size=1,
         shuffle=False,
         num_workers=2,
@@ -53,10 +53,9 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     )
 
     train_loader = DataLoader(
-        # CityscapesData(Split.TRAIN, cityscapes_dir),
         CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
         batch_size=3,
-        # shuffle=True,
+        shuffle=True,
         num_workers=2,
         collate_fn=collate_fn,
     )
@@ -107,8 +106,6 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             loss.backward()
             optimizer.step()
 
-        if epoch % 5 != 0:
-            continue
         logger.info("Running validation...")
 
         with torch.no_grad():
@@ -190,13 +187,14 @@ def _test_model(checkpoint, writer, model, loader, device):
         class_targets, centerness_targets, box_targets = generate_targets(
             x.shape, class_labels, box_labels, model.strides
         )
-        for j in range(len(classes)):
-            writer.add_image(f"class {i} feat {j}", classes[j][0][:, :, 1], checkpoint, dataformats="HW")
-            writer.add_image(f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW")
-            writer.add_image(f"centerness {i} feat {j}", centernesses[j][0], checkpoint, dataformats="HW")
-            writer.add_image(
-                f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW"
-            )
+        if i == 0:
+            for j in range(len(classes)):
+                writer.add_image(f"class {i} feat {j}", classes[j][0][:, :, 1], checkpoint, dataformats="HW")
+                writer.add_image(f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW")
+                writer.add_image(f"centerness {i} feat {j}", centernesses[j][0], checkpoint, dataformats="HW")
+                writer.add_image(
+                    f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW"
+                )
 
         loss = _compute_loss(
             model.strides, classes, centernesses, boxes, class_targets, centerness_targets, box_targets

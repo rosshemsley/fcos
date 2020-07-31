@@ -33,11 +33,9 @@ def compute_pascal_voc_metrics(
 
     total_boxes = 0
     for i, gt_boxes_for_image in enumerate(ground_truth_boxes_by_image):
-        print(f"image {i} contains {len(gt_boxes_for_image)}")
         all_boxes = np.zeros((len(gt_boxes_for_image), 4))
         total_boxes += len(gt_boxes_for_image)
         for j, box in enumerate(gt_boxes_for_image):
-            print(f"   BOX {j}, {box}")
             all_boxes[j, :] = box
         image_index_to_gt_boxes[i] = dict(bbox=all_boxes)
 

@@ -53,7 +53,8 @@ class CityscapesData(Dataset):
         )
 
     def __len__(self) -> int:
-        return min(len(self.dataset), 3)
+        # return min(len(self.dataset), 10)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
         img, poly = self.dataset[idx]
