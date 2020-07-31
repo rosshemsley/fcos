@@ -4,6 +4,7 @@ import logging
 
 import cv2
 import math
+import shapecheck
 from typing import List
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -44,17 +45,18 @@ logger = logging.getLogger(__name__)
 
 def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     val_loader = DataLoader(
-        CityscapesData(Split.VALIDATE, cityscapes_dir, image_transforms=[Resize(512)]),
-        batch_size=3,
+        CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
+        batch_size=1,
         shuffle=False,
         num_workers=2,
         collate_fn=collate_fn,
     )
 
     train_loader = DataLoader(
+        # CityscapesData(Split.TRAIN, cityscapes_dir),
         CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
         batch_size=3,
-        shuffle=True,
+        # shuffle=True,
         num_workers=2,
         collate_fn=collate_fn,
     )
@@ -102,7 +104,10 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             writer.add_scalar("Loss/train", loss.item(), batch_index)
             loss.backward()
             optimizer.step()
+            print(model.scales)
 
+        if epoch % 5 != 0:
+            continue
         logger.info("Running validation...")
 
         with torch.no_grad():
@@ -120,6 +125,14 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
         checkpoint += 1
 
 
+# @shapecheck.check_args(
+#     classes=("B", "H", "W", "classtype"),
+#     centernesses=("B", "H", "W"),
+#     boxes=("B", "H", "W", ("l", "t", "r", "b")),
+#     class_targets=("B", "H", "W"),
+#     centerness_targets=("B", "H", "W"),
+#     box_targets=("B", "H", "W", ("l", "t", "r", "b")),
+# )
 def _compute_loss(
     classes, centernesses, boxes, class_targets, centerness_targets, box_targets
 ) -> torch.Tensor:
@@ -150,7 +163,8 @@ def _compute_loss(
             mask = cls_target[batch_idx] > 0
 
             if mask.nonzero().sum() > 0:
-                l = torch.log(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]))
+                # box_loss = 
+                l = box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) * 2**feature_idx
                 losses.append(l)
 
     return torch.stack(losses).mean()
@@ -166,6 +180,7 @@ def _test_model(checkpoint, writer, model, loader, device):
     images = []
 
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
+        print("VAL BATCH", x.shape)
         logging.info(f"Validation for {i}")
         img = tensor_to_image(x[0])
 
@@ -178,13 +193,17 @@ def _test_model(checkpoint, writer, model, loader, device):
             img_height, img_width, classes, centernesses, boxes, model.scales, model.strides
         )
         render_detections_to_image(img, detections[0])
+        _render_targets_to_image(img, box_labels[0])
 
         class_targets, centerness_targets, box_targets = generate_targets(
             x.shape, class_labels, box_labels, model.strides
         )
+        for j in range(len(classes)):
+            writer.add_image(f"class {i} feat {j}", classes[j][0][:, :, 1], checkpoint, dataformats="HW")
+            writer.add_image(f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW")
 
-        writer.add_image(f"class {i}", classes[0][0][:, :, 1], checkpoint, dataformats="HW")
-        writer.add_image(f"centerness {i}", centernesses[0][0], checkpoint, dataformats="HW")
+            writer.add_image(f"centerness {i} feat {j}", centernesses[j][0], checkpoint, dataformats="HW")
+            writer.add_image(f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW")
 
         loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
         logging.info(f"Validation loss: {loss.item()}")
@@ -201,7 +220,7 @@ def _test_model(checkpoint, writer, model, loader, device):
 
     metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)
     logging.info(
-        f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}"
+        f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}, total gt: {metrics.total_ground_truth_detections}"
     )
     writer.add_scalar("Metrics/mAP", metrics.mean_average_precision, checkpoint)
 
@@ -262,3 +281,14 @@ def _image_grid(images: List[np.ndarray], images_per_row: int, image_width: int)
         result[r : r + h, c : c + w] = resized_image
 
     return result
+
+
+@shapecheck.check_args(box_labels=("N", ("min_x", "min_y", "max_x", "max_y")))
+def _render_targets_to_image(img: np.ndarray, box_labels: torch.Tensor):
+    # print(box_labels)
+    for i in range(box_labels.shape[0]):
+        start_point = (int(box_labels[i][0].item()), int(box_labels[i][1].item()))
+        end_point = (int(box_labels[i][2].item()), int(box_labels[i][3].item()))
+        img = cv2.rectangle(img, start_point, end_point, (255, 0, 0), 1)
+
+    return img

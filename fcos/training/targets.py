@@ -43,10 +43,10 @@ def generate_targets(
             areas = torch.mul(widths, heights)
 
             for j in torch.argsort(areas, dim=0, descending=True):
-                if heights[j] < min_box_side or heights[j] > max_box_side:
+                if max(heights[j], widths[j]) < min_box_side or max(heights[j], widths[j]) > max_box_side:
                     continue
-                if widths[j] < min_box_side or widths[j] > max_box_side:
-                    continue
+                # if widths[j] < min_box_side or widths[j] > max_box_side:
+                    # continue
 
                 min_x = max(int(box_labels[j][0] / stride), 0)
                 min_y = max(int(box_labels[j][1] / stride), 0)
@@ -61,8 +61,6 @@ def generate_targets(
                     for y in range(min_y, max_y):
                         if x == 0 or y == 0 or x == max_x - 1 or y == max_y - 1:
                             dist = 0
-                        # dy = mid_y - y
-                        # dx = mid_x - x
                         else:
                             l = x - min_x
                             r = max_x - 1 - x
@@ -70,27 +68,22 @@ def generate_targets(
                             b = max_y - 1 - y
                             dist = math.sqrt(min(l, r) / float(max(l, r)) * min(t, b) / float(max(t, b)))
 
-                        # dist = math.exp(-(dy*dy /b_h  + dx * dx / b_w ))
-
                         centerness = dist
-                        # if y < 0 or x < 0 or y >= centerness_target_for_feature[batch_idx].shape[0] or x >= centerness_target_for_feature[batch_idx].shape[1]:
-                        # continue
                         centerness_target_for_feature[batch_idx, y, x] = centerness
 
-                class_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = class_labels[j]
+                class_target_for_feature[batch_idx, min_y+1:max_y-1, min_x+1:max_x-1] = class_labels[j]
 
-                for x in range(min_x, max_x):
-                    for y in range(min_y, max_y):
-                        x_img = x * stride
-                        y_img = y * stride
+                for x in range(min_x + 1, max_x - 1):
+                    for y in range(min_y + 1, max_y - 1):
                         target = torch.Tensor(
                             [
-                                float(x_img - box_labels[j][0]),
-                                float(y_img - box_labels[j][1]),
-                                float(box_labels[j][2] - x_img),
-                                float(box_labels[j][3] - y_img),
+                                x - float(box_labels[j][0]) / stride,
+                                y - float(box_labels[j][1]) / stride,
+                                float(box_labels[j][2]) / stride - x,
+                                float(box_labels[j][3]) / stride - y,
                             ]
                         )
+                        # print(target)
                         box_target_for_feature[batch_idx, y, x] = target
 
         class_targets_by_feature.append(class_target_for_feature)

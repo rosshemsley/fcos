@@ -8,6 +8,7 @@ from fcos.vendor.pascal_voc_tools.evaluator import voc_eval
 
 @dataclass
 class PascalVOCMetrics:
+    total_ground_truth_detections: int
     true_positive_count: int
     false_positive_count: int
     recall: float
@@ -30,9 +31,13 @@ def compute_pascal_voc_metrics(
 
     image_index_to_gt_boxes: Dict[int, np.ndarray] = {}
 
+    total_boxes = 0
     for i, gt_boxes_for_image in enumerate(ground_truth_boxes_by_image):
+        print(f"image {i} contains {len(gt_boxes_for_image)}")
         all_boxes = np.zeros((len(gt_boxes_for_image), 4))
+        total_boxes += len(gt_boxes_for_image)
         for j, box in enumerate(gt_boxes_for_image):
+            print(f"   BOX {j}, {box}")
             all_boxes[j, :] = box
         image_index_to_gt_boxes[i] = dict(bbox=all_boxes)
 
@@ -51,6 +56,7 @@ def compute_pascal_voc_metrics(
         # then the mAP should be 1.0
         # We should also consider the case where there are no ground truth boxes.
         return PascalVOCMetrics(
+            total_ground_truth_detections=total_boxes,
             true_positive_count=0,
             false_positive_count=0,
             recall=[],
@@ -64,6 +70,7 @@ def compute_pascal_voc_metrics(
 
     dct = voc_eval(image_index_to_gt_boxes, detections, iou_threshold)
     return PascalVOCMetrics(
+        total_ground_truth_detections=total_boxes,
         true_positive_count=dct["true_positive_number"],
         false_positive_count=dct["false_positive_number"],
         recall=dct["recall"],

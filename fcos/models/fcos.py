@@ -7,6 +7,8 @@ import torchvision
 from torchvision.transforms import Normalize
 from typing import List, Tuple
 
+import shapecheck
+
 from .backbone import Backbone
 
 CLASSES = [
@@ -41,7 +43,6 @@ class FCOS(nn.Module):
             nn.ReLU(inplace=True),
             _convgn(256, 256),
             nn.ReLU(inplace=True),
-            # nn.BatchNorm2d(256),
         )
 
         self.classification_to_class = nn.Sequential(_convgn(256, len(CLASSES)),)
@@ -84,6 +85,7 @@ class FCOS(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = True
 
+    @shapecheck.check_args(x=("B", ("R", "G", "B"), "H", "W"))
     def forward(self, x: torch.Tensor) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
         """
         Takes as input a batch of images encoded as BCHW, which have been normalized using
@@ -98,10 +100,10 @@ class FCOS(nn.Module):
         _, _, img_height, img_width = x.shape
 
         layer_1, layer_2, layer_3 = self.backbone(x)
-
+        print("BACKBONE", layer_1.shape, layer_2.shape, layer_3.shape)
         p5 = self.layer_3_to_p5(layer_3)
-        p4 = self.layer_2_to_p4(layer_2) + _upsample(p5)
-        p3 = self.layer_1_to_p3(layer_1) + _upsample(p4)
+        p4 = self.layer_2_to_p4(layer_2) + _upsample(p5, layer_2.shape[2:4])
+        p3 = self.layer_1_to_p3(layer_1) + _upsample(p4, layer_1.shape[2:4])
         p6 = self.p5_to_p6(p5)
         p7 = self.p6_to_p7(p6)
 
@@ -119,7 +121,7 @@ class FCOS(nn.Module):
 
             # B[C]HW  -> BHW[C]
             classes = classes.permute(0, 2, 3, 1).contiguous()
-            centerness = centerness.permute(0, 2, 3, 1).contiguous().squeeze()
+            centerness = centerness.permute(0, 2, 3, 1).contiguous().squeeze(3)
             reg = reg.permute(0, 2, 3, 1).contiguous()
 
             reg_by_feature.append(reg)
@@ -144,8 +146,8 @@ def normalize_batch(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-def _upsample(x: torch.Tensor) -> torch.Tensor:
-    return F.interpolate(x, size=(x.shape[2] * 2, x.shape[3] * 2), mode="bilinear", align_corners=True)
+def _upsample(x: torch.Tensor, size) -> torch.Tensor:
+    return F.interpolate(x, size=size, mode="bilinear", align_corners=True)
 
 
 def _convgn(in_channels: int, out_channels: int, kernel_size=3, padding=1, stride=1) -> nn.Module:

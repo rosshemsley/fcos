@@ -25,7 +25,7 @@ def render_detections_to_image(img: np.ndarray, detections: List[Detection]):
     for detection in detections:
         start_point = (detection.bbox[0], detection.bbox[1])
         end_point = (detection.bbox[2], detection.bbox[3])
-        img = cv2.rectangle(img, start_point, end_point, (0, 255, 0), 1)
+        img = cv2.rectangle(img, start_point, end_point, (0, 255, 0), 2)
 
     return img
 
@@ -47,7 +47,7 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
         classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
 
 
-def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, scales, strides):
+def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, scales, strides) -> List[List[Detection]]:
     all_classes = []
     all_centernesses = []
     all_boxes = []
@@ -78,21 +78,23 @@ def _boxes_from_regression(reg, img_height, img_width, scale, stride):
     Returns B[x_min, y_min, x_max, y_max], in image space, given regression
     values, which represent offests (left, top, right, bottom).
     """
-    half_stride = stride / 2.0
+    half_stride = stride // 2
     _, rows, cols, _ = reg.shape
 
-    y = torch.linspace(half_stride, img_height - half_stride, rows).to(reg.device)
-    x = torch.linspace(half_stride, img_width - half_stride, cols).to(reg.device)
+    # y = torch.linspace(half_stride, img_height - half_stride, rows).to(reg.device)
+    # x = torch.linspace(half_stride, img_width - half_stride, cols).to(reg.device)
+    y = torch.linspace(0, img_height - stride, rows).to(reg.device)
+    x = torch.linspace(0, img_width - stride, cols).to(reg.device)
 
     center_y, center_x = torch.meshgrid(y, x)
     center_y = center_y.squeeze(0)
     center_x = center_x.squeeze(0)
     # reg[:,:,:,:] = 5
 
-    x_min = center_x - reg[:, :, :, 0]
-    y_min = center_y - reg[:, :, :, 1]
-    x_max = center_x + reg[:, :, :, 2]
-    y_max = center_y + reg[:, :, :, 3]
+    x_min = center_x - reg[:, :, :, 0] * stride
+    y_min = center_y - reg[:, :, :, 1] * stride
+    x_max = center_x + reg[:, :, :, 2] * stride
+    y_max = center_y + reg[:, :, :, 3] * stride
 
     return torch.stack([x_min, y_min, x_max, y_max], dim=3)
 
