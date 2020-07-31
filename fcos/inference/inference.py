@@ -47,7 +47,9 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
         classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
 
 
-def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, scales, strides) -> List[List[Detection]]:
+def detections_from_network_output(
+    img_height, img_width, classes, centernesses, boxes, scales, strides
+) -> List[List[Detection]]:
     all_classes = []
     all_centernesses = []
     all_boxes = []

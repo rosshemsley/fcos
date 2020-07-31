@@ -100,7 +100,6 @@ class FCOS(nn.Module):
         _, _, img_height, img_width = x.shape
 
         layer_1, layer_2, layer_3 = self.backbone(x)
-        print("BACKBONE", layer_1.shape, layer_2.shape, layer_3.shape)
         p5 = self.layer_3_to_p5(layer_3)
         p4 = self.layer_2_to_p4(layer_2) + _upsample(p5, layer_2.shape[2:4])
         p3 = self.layer_1_to_p3(layer_1) + _upsample(p4, layer_1.shape[2:4])

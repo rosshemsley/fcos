@@ -45,8 +45,6 @@ def generate_targets(
             for j in torch.argsort(areas, dim=0, descending=True):
                 if max(heights[j], widths[j]) < min_box_side or max(heights[j], widths[j]) > max_box_side:
                     continue
-                # if widths[j] < min_box_side or widths[j] > max_box_side:
-                    # continue
 
                 min_x = max(int(box_labels[j][0] / stride), 0)
                 min_y = max(int(box_labels[j][1] / stride), 0)
@@ -71,7 +69,9 @@ def generate_targets(
                         centerness = dist
                         centerness_target_for_feature[batch_idx, y, x] = centerness
 
-                class_target_for_feature[batch_idx, min_y+1:max_y-1, min_x+1:max_x-1] = class_labels[j]
+                class_target_for_feature[
+                    batch_idx, min_y + 1 : max_y - 1, min_x + 1 : max_x - 1
+                ] = class_labels[j]
 
                 for x in range(min_x + 1, max_x - 1):
                     for y in range(min_y + 1, max_y - 1):
@@ -83,7 +83,6 @@ def generate_targets(
                                 float(box_labels[j][3]) / stride - y,
                             ]
                         )
-                        # print(target)
                         box_target_for_feature[batch_idx, y, x] = target
 
         class_targets_by_feature.append(class_target_for_feature)

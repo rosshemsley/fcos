@@ -98,13 +98,14 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
                 x.shape, class_labels, box_labels, model.strides
             )
 
-            loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
+            loss = _compute_loss(
+                model.strides, classes, centernesses, boxes, class_targets, centerness_targets, box_targets
+            )
             logging.info(f"Epoch: {epoch}, batch: {batch_index}/{len(train_loader)}, loss: {loss.item()}")
 
             writer.add_scalar("Loss/train", loss.item(), batch_index)
             loss.backward()
             optimizer.step()
-            print(model.scales)
 
         if epoch % 5 != 0:
             continue
@@ -125,16 +126,8 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
         checkpoint += 1
 
 
-# @shapecheck.check_args(
-#     classes=("B", "H", "W", "classtype"),
-#     centernesses=("B", "H", "W"),
-#     boxes=("B", "H", "W", ("l", "t", "r", "b")),
-#     class_targets=("B", "H", "W"),
-#     centerness_targets=("B", "H", "W"),
-#     box_targets=("B", "H", "W", ("l", "t", "r", "b")),
-# )
 def _compute_loss(
-    classes, centernesses, boxes, class_targets, centerness_targets, box_targets
+    strides, classes, centernesses, boxes, class_targets, centerness_targets, box_targets
 ) -> torch.Tensor:
     batch_size = classes[0].shape[0]
     num_classes = classes[0].shape[-1]
@@ -163,8 +156,8 @@ def _compute_loss(
             mask = cls_target[batch_idx] > 0
 
             if mask.nonzero().sum() > 0:
-                # box_loss = 
-                l = box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) * 2**feature_idx
+                # box_loss =
+                l = box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) * strides[feature_idx]
                 losses.append(l)
 
     return torch.stack(losses).mean()
@@ -180,7 +173,6 @@ def _test_model(checkpoint, writer, model, loader, device):
     images = []
 
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
-        print("VAL BATCH", x.shape)
         logging.info(f"Validation for {i}")
         img = tensor_to_image(x[0])
 
@@ -201,11 +193,14 @@ def _test_model(checkpoint, writer, model, loader, device):
         for j in range(len(classes)):
             writer.add_image(f"class {i} feat {j}", classes[j][0][:, :, 1], checkpoint, dataformats="HW")
             writer.add_image(f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW")
-
             writer.add_image(f"centerness {i} feat {j}", centernesses[j][0], checkpoint, dataformats="HW")
-            writer.add_image(f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW")
+            writer.add_image(
+                f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW"
+            )
 
-        loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
+        loss = _compute_loss(
+            model.strides, classes, centernesses, boxes, class_targets, centerness_targets, box_targets
+        )
         logging.info(f"Validation loss: {loss.item()}")
 
         writer.add_scalar("Loss/val", loss.item(), checkpoint)
@@ -244,9 +239,9 @@ def _compute_metrics(
             predicted_boxes.append(detection.bbox)
             predicted_scores.append(detection.score)
 
-        for box_label in box_labels:
-            for i in range(box_label.shape[0]):
-                gt_boxes.append(box_label[i, :].numpy())
+        # for box_label in img_box_labels:
+        for i in range(img_box_labels.shape[0]):
+            gt_boxes.append(img_box_labels[i, :].numpy())
 
         ground_truth_boxes_by_image.append(gt_boxes)
         predicted_boxes_by_image.append(predicted_boxes)
@@ -285,7 +280,6 @@ def _image_grid(images: List[np.ndarray], images_per_row: int, image_width: int)
 
 @shapecheck.check_args(box_labels=("N", ("min_x", "min_y", "max_x", "max_y")))
 def _render_targets_to_image(img: np.ndarray, box_labels: torch.Tensor):
-    # print(box_labels)
     for i in range(box_labels.shape[0]):
         start_point = (int(box_labels[i][0].item()), int(box_labels[i][1].item()))
         end_point = (int(box_labels[i][2].item()), int(box_labels[i][3].item()))
