@@ -50,7 +50,8 @@ def test(cityscapes_dir, model_checkpoint, output):
     model.load_state_dict(state["model"])
 
     loader = DataLoader(
-        CityscapesData(Split.TEST, cityscapes_dir, image_transforms=[Resize(512)]),
+        # CityscapesData(Split.TEST, cityscapes_dir, image_transforms=[Resize(512)]),
+        CityscapesData(Split.TEST, cityscapes_dir),
         batch_size=1,
         shuffle=False,
         num_workers=2,
@@ -70,7 +71,12 @@ def test(cityscapes_dir, model_checkpoint, output):
         with torch.no_grad():
             classes, centernesses, boxes = model(x)
 
-        detections = detections_from_network_output(classes, centernesses, boxes)
+        img_height, img_width = x.shape[2:4]
+
+        print("scales", model.scales)
+        detections = detections_from_network_output(
+            img_height, img_width, classes, centernesses, boxes, model.scales, model.strides
+        )
         render_detections_to_image(img, detections[0])
 
         path = os.path.join(output, f"img_{i}.png")

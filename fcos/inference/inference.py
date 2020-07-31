@@ -1,3 +1,5 @@
+import math
+
 import cv2
 from dataclasses import dataclass
 from typing import List
@@ -45,7 +47,7 @@ def compute_detections_for_tensor(model: FCOS, x, device) -> List[Detection]:
         classes_by_feature, centerness_by_feature, boxes_by_feature = model(batch)
 
 
-def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, strides):
+def detections_from_network_output(img_height, img_width, classes, centernesses, boxes, scales, strides):
     all_classes = []
     all_centernesses = []
     all_boxes = []
@@ -54,8 +56,10 @@ def detections_from_network_output(img_height, img_width, classes, centernesses,
     n_classes = classes[0].shape[-1]
     batch_size = classes[0].shape[0]
 
-    for feat_classes, feat_centernesses, feat_boxes, stride in zip(classes, centernesses, boxes, strides):
-        boxes = _boxes_from_regression(feat_boxes, img_height, img_width, 1.0, stride)
+    for feat_classes, feat_centernesses, feat_boxes, scale, stride in zip(
+        classes, centernesses, boxes, scales, strides
+    ):
+        boxes = _boxes_from_regression(feat_boxes, img_height, img_width, scale, stride)
 
         all_classes.append(feat_classes.view(batch_size, -1, n_classes))
         all_centernesses.append(feat_centernesses.view(batch_size, -1))
@@ -91,8 +95,6 @@ def _boxes_from_regression(reg, img_height, img_width, scale, stride):
     y_max = center_y + reg[:, :, :, 3]
 
     return torch.stack([x_min, y_min, x_max, y_max], dim=3)
-
-
 
 
 def detections_from_net(boxes_by_batch, classes_by_batch, scores_by_batch=None) -> List[List[Detection]]:
@@ -143,14 +145,12 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
 
         class_scores_i = class_scores_i.mul(centerness_i)
 
-
         non_minimal_points = class_scores_i > 0.05
 
         class_scores_i = class_scores_i[non_minimal_points]
         boxes_i = boxes_i[non_minimal_points]
         centerness_i = centerness_i[non_minimal_points]
         class_indices_i = class_indices_i[non_minimal_points]
-
 
         num_detections = min(class_scores_i.shape[0], max_detections)
         _, top_detection_indices = torch.topk(class_scores_i, num_detections, dim=0)
@@ -159,7 +159,7 @@ def _gather_detections(classes, centernesses, boxes, max_detections=DEFAULT_MAX_
         top_classes_i = torch.index_select(class_indices_i, 0, top_detection_indices)
         top_scores_i = torch.index_select(class_scores_i, 0, top_detection_indices)
 
-        boxes_to_keep =  torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
+        boxes_to_keep = torchvision.ops.nms(top_boxes_i, top_scores_i, 0.6)
 
         top_boxes_i = top_boxes_i[boxes_to_keep]
         top_classes_i = top_classes_i[boxes_to_keep]

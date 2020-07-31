@@ -14,7 +14,7 @@ class Backbone(nn.Module):
 
     def __init__(self):
         super(Backbone, self).__init__()
-        self.resnet = resnet50(pretrained=True)
+        self.resnet = resnet50(pretrained=False)
 
     def forward(self, x):
         x = self.resnet.conv1(x)

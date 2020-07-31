@@ -53,7 +53,7 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
 
     train_loader = DataLoader(
         CityscapesData(Split.TRAIN, cityscapes_dir, image_transforms=[Resize(512)]),
-        batch_size=4,
+        batch_size=3,
         shuffle=True,
         num_workers=2,
         collate_fn=collate_fn,
@@ -74,15 +74,15 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     # optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.1)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    logger.info("Freezing backbone network")
-    model.freeze_backbone()
+    # logger.info("Freezing backbone network")
+    # model.freeze_backbone()
 
-    for epoch in range(1, 100):
+    for epoch in range(1, 10000):
         logger.info(f"Starting epoch {epoch}")
 
-        if epoch == 3:
-            logger.info("Unfreezing backbone network")
-            model.unfreeze_backbone()
+        # if epoch == 3:
+        # logger.info("Unfreezing backbone network")
+        # model.unfreeze_backbone()
 
         for batch_index, (x, class_labels, box_labels) in enumerate(train_loader, 0):
             model.train()
@@ -103,22 +103,21 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
             loss.backward()
             optimizer.step()
 
-            if batch_index % 100 == 0:
-                logger.info("Running validation...")
+        logger.info("Running validation...")
 
-                with torch.no_grad():
-                    _test_model(checkpoint, writer, model, val_loader, device)
+        with torch.no_grad():
+            _test_model(checkpoint, writer, model, val_loader, device)
 
-                path = os.path.join(writer.log_dir, f"fcos_{checkpoint}.chkpt")
-                logger.info(f"Saving checkpoint to '{path}'")
-                state = dict(
-                    model=model.state_dict(),
-                    epoch=epoch,
-                    batch_index=batch_index,
-                    optimizer_state=optimizer.state_dict(),
-                )
-                torch.save(state, path)
-                checkpoint += 1
+        path = os.path.join(writer.log_dir, f"fcos_{checkpoint}.chkpt")
+        logger.info(f"Saving checkpoint to '{path}'")
+        state = dict(
+            model=model.state_dict(),
+            epoch=epoch,
+            batch_index=batch_index,
+            optimizer_state=optimizer.state_dict(),
+        )
+        torch.save(state, path)
+        checkpoint += 1
 
 
 def _compute_loss(
@@ -144,23 +143,14 @@ def _compute_loss(
         centerness_view = centernesses[feature_idx].view(batch_size, -1)
 
         losses.append(centerness_loss(centerness_view, centerness_target))
-        # print("CLS size", cls_view.shape, "target shape", cls_target.shape)
         ls = class_loss(cls_view.view(-1, num_classes), cls_target.view(-1))
         losses.append(ls)
 
         for batch_idx in range(batch_size):
             mask = cls_target[batch_idx] > 0
-            # if mask.nonzero().sum() == 0:
-                # print("no weight")
-                # continue
-            # else:
-                # print("yes weight")
-            # print("non zero", mask.nonzero().sum())
-            # print("class loss", ls)
 
             if mask.nonzero().sum() > 0:
                 l = torch.log(box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]))
-                print("box loss", l.item())
                 losses.append(l)
 
     return torch.stack(losses).mean()
@@ -176,9 +166,6 @@ def _test_model(checkpoint, writer, model, loader, device):
     images = []
 
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
-        if i == 12:
-            break
-
         logging.info(f"Validation for {i}")
         img = tensor_to_image(x[0])
 
@@ -187,19 +174,17 @@ def _test_model(checkpoint, writer, model, loader, device):
 
         classes, centernesses, boxes = model(x)
         img_height, img_width = x.shape[2:4]
-        detections = detections_from_network_output(img_height, img_width, classes, centernesses, boxes, model.strides)
+        detections = detections_from_network_output(
+            img_height, img_width, classes, centernesses, boxes, model.scales, model.strides
+        )
         render_detections_to_image(img, detections[0])
 
         class_targets, centerness_targets, box_targets = generate_targets(
             x.shape, class_labels, box_labels, model.strides
         )
 
-        # print(centerness_targets[0][0].shape)
-        writer.add_image(f"class {i}", classes[0][0][:,:,1], checkpoint, dataformats="HW")
-        # writer.add_image(f"class target {i}", class_targets[0][0], checkpoint, dataformats="HW")
-
+        writer.add_image(f"class {i}", classes[0][0][:, :, 1], checkpoint, dataformats="HW")
         writer.add_image(f"centerness {i}", centernesses[0][0], checkpoint, dataformats="HW")
-
 
         loss = _compute_loss(classes, centernesses, boxes, class_targets, centerness_targets, box_targets)
         logging.info(f"Validation loss: {loss.item()}")
@@ -211,7 +196,7 @@ def _test_model(checkpoint, writer, model, loader, device):
         all_box_labels.extend(box_labels)
         all_class_labels.extend(class_labels)
 
-    grid = _image_grid(images, 3, 2048)
+    grid = _image_grid(images[0:24], 3, 2048)
     writer.add_image(f"fcos test {i}", grid, checkpoint, dataformats="HWC")
 
     metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)

@@ -25,23 +25,16 @@ def generate_targets(
     m = (0, 64, 128, 256, 512, math.inf)
 
     for i, stride in enumerate(strides):
-        h = img_shape[2]
-        w = img_shape[3]
-
         feat_h = int(img_shape[2] / stride)
-        feat_w = int(img_shape[3] / stride)  
-        # h = int(img_shape[2] / stride)
-        # w = int(img_shape[3] / stride)
+        feat_w = int(img_shape[3] / stride)
 
         class_target_for_feature = torch.zeros(batch_size, feat_h, feat_w, dtype=int)
         centerness_target_for_feature = torch.zeros(batch_size, feat_h, feat_w)
         box_target_for_feature = torch.zeros(batch_size, feat_h, feat_w, 4)
 
         min_box_side = m[i]
-        max_box_side = m[i+1]
-        # print(stride, min_box_side, max_box_side)
+        max_box_side = m[i + 1]
 
-        # print(f"for {i}, stride is {stride}, size is {img_shape}, max width is {max_box_side}, min width is {min_box_side}")
         for batch_idx, (class_labels, box_labels) in enumerate(
             zip(class_labels_by_batch, box_labels_by_batch)
         ):
@@ -66,32 +59,38 @@ def generate_targets(
                 b_h = max_y - min_y
                 for x in range(min_x, max_x):
                     for y in range(min_y, max_y):
+                        if x == 0 or y == 0 or x == max_x - 1 or y == max_y - 1:
+                            dist = 0
+                        # dy = mid_y - y
+                        # dx = mid_x - x
+                        else:
+                            l = x - min_x
+                            r = max_x - 1 - x
+                            t = y - min_y
+                            b = max_y - 1 - y
+                            dist = math.sqrt(min(l, r) / float(max(l, r)) * min(t, b) / float(max(t, b)))
 
-                        dy = mid_y - y
-                        dx = mid_x - x
-
-                        dist = math.exp(-(dy*dy /b_h  + dx * dx / b_w ))
+                        # dist = math.exp(-(dy*dy /b_h  + dx * dx / b_w ))
 
                         centerness = dist
-                        # centerness = 1
-                        if y < 0 or x < 0 or y >= centerness_target_for_feature[batch_idx].shape[0] or x >= centerness_target_for_feature[batch_idx].shape[1]:
-                            continue
-                        centerness_target_for_feature[batch_idx, y, x] = max(centerness, centerness_target_for_feature[batch_idx, y, x])
+                        # if y < 0 or x < 0 or y >= centerness_target_for_feature[batch_idx].shape[0] or x >= centerness_target_for_feature[batch_idx].shape[1]:
+                        # continue
+                        centerness_target_for_feature[batch_idx, y, x] = centerness
 
                 class_target_for_feature[batch_idx, min_y:max_y, min_x:max_x] = class_labels[j]
-                
+
                 for x in range(min_x, max_x):
                     for y in range(min_y, max_y):
                         x_img = x * stride
                         y_img = y * stride
-                        # print("stride", stride, f"w:{w* stride}, h: {h* stride}", f"miny: {min_y * stride}, maxy: {max_y* stride}",  "img pos", x_img, y_img, "box:", box_labels[j])
-                        target = torch.Tensor([
-                            float(x_img - box_labels[j][0]),
-                            float(y_img - box_labels[j][1]),
-                            float(box_labels[j][2] - x_img) ,
-                            float(box_labels[j][3] - y_img),
-                        ])
-                        # print("target", target)
+                        target = torch.Tensor(
+                            [
+                                float(x_img - box_labels[j][0]),
+                                float(y_img - box_labels[j][1]),
+                                float(box_labels[j][2] - x_img),
+                                float(box_labels[j][3] - y_img),
+                            ]
+                        )
                         box_target_for_feature[batch_idx, y, x] = target
 
         class_targets_by_feature.append(class_target_for_feature)

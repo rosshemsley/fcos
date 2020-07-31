@@ -4,6 +4,7 @@ import numpy as np
 
 from fcos.metrics import compute_pascal_voc_metrics
 
+
 def test_pascal_voc_1():
     ground_truth_boxes = [
         np.array([0.0, 0.0, 1.0, 1.0]),
