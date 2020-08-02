@@ -73,7 +73,6 @@ def test(cityscapes_dir, model_checkpoint, output):
 
         img_height, img_width = x.shape[2:4]
 
-        print("scales", model.scales)
         detections = detections_from_network_output(
             img_height, img_width, classes, centernesses, boxes, model.scales, model.strides
         )

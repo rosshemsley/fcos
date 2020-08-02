@@ -23,9 +23,10 @@ class Detection:
 
 def render_detections_to_image(img: np.ndarray, detections: List[Detection]):
     for detection in detections:
-        start_point = (detection.bbox[0], detection.bbox[1])
-        end_point = (detection.bbox[2], detection.bbox[3])
-        img = cv2.rectangle(img, start_point, end_point, (0, 255, 0), 2)
+        if detection.score > 0.3:
+            start_point = (detection.bbox[0], detection.bbox[1])
+            end_point = (detection.bbox[2], detection.bbox[3])
+            img = cv2.rectangle(img, start_point, end_point, (0, 255, 0), 2)
 
     return img
 
