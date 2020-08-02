@@ -46,7 +46,6 @@ class FCOS(nn.Module):
         )
 
         self.classification_to_class = nn.Sequential(_convgn(256, len(CLASSES)),)
-
         self.classification_to_centerness = nn.Sequential(_convgn(256, 1),)
 
         self.regression_head = nn.Sequential(

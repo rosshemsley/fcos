@@ -17,8 +17,7 @@ DEFAULT_MAX_DETECTIONS = 3000
 class Detection:
     score: float
     object_class: int
-    # encoded as [min_x, min_y, max_x, max_y]
-    bbox: np.ndarray
+    bbox: np.ndarray  # (min_x, min_y, max_x, max_y)
 
 
 def render_detections_to_image(img: np.ndarray, detections: List[Detection]):
@@ -55,7 +54,6 @@ def detections_from_network_output(
     all_centernesses = []
     all_boxes = []
 
-    # print("height, width:", img_height, img_width)
     n_classes = classes[0].shape[-1]
     batch_size = classes[0].shape[0]
 
@@ -84,15 +82,12 @@ def _boxes_from_regression(reg, img_height, img_width, scale, stride):
     half_stride = stride // 2
     _, rows, cols, _ = reg.shape
 
-    # y = torch.linspace(half_stride, img_height - half_stride, rows).to(reg.device)
-    # x = torch.linspace(half_stride, img_width - half_stride, cols).to(reg.device)
     y = torch.linspace(0, img_height - stride, rows).to(reg.device)
     x = torch.linspace(0, img_width - stride, cols).to(reg.device)
 
     center_y, center_x = torch.meshgrid(y, x)
     center_y = center_y.squeeze(0)
     center_x = center_x.squeeze(0)
-    # reg[:,:,:,:] = 5
 
     x_min = center_x - reg[:, :, :, 0] * stride
     y_min = center_y - reg[:, :, :, 1] * stride

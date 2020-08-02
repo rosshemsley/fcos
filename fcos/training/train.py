@@ -71,18 +71,10 @@ def train(cityscapes_dir: pathlib.Path, writer: SummaryWriter):
     checkpoint = 0
 
     learning_rate = 1e-4
-    # optimizer = torch.optim.SGD(model.parameters(), lr=1e-4, momentum=0.1)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-    # logger.info("Freezing backbone network")
-    # model.freeze_backbone()
 
     for epoch in range(1, 10000):
         logger.info(f"Starting epoch {epoch}")
-
-        # if epoch == 3:
-        # logger.info("Unfreezing backbone network")
-        # model.unfreeze_backbone()
 
         for batch_index, (x, class_labels, box_labels) in enumerate(train_loader, 0):
             model.train()
@@ -152,7 +144,6 @@ def _compute_loss(
             mask = cls_target[batch_idx] > 0
 
             if mask.nonzero().sum() > 0:
-                # box_loss =
                 l = box_loss(box_view[batch_idx][mask], box_target[batch_idx][mask]) * strides[feature_idx]
                 losses.append(l)
 
