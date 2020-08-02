@@ -29,14 +29,13 @@ from torchvision.transforms import (
 
 from fcos.datasets import tensor_to_image, collate_fn, CityscapesData, Split
 from fcos.inference import (
-    Detection,
     compute_detections_for_tensor,
     render_detections_to_image,
     detections_from_net,
     detections_from_network_output,
 )
 from fcos.models import FCOS, normalize_batch
-from fcos.metrics import compute_pascal_voc_metrics
+from fcos.metrics import compute_metrics
 
 from .targets import generate_targets
 
@@ -190,7 +189,9 @@ def _test_model(checkpoint, writer, model, loader, device):
         if i == 0:
             for j in range(len(classes)):
                 writer.add_image(f"class {i} feat {j}", classes[j][0][:, :, 1], checkpoint, dataformats="HW")
-                writer.add_image(f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW")
+                writer.add_image(
+                    f"class target {i} feat {j}", class_targets[j][0], checkpoint, dataformats="HW"
+                )
                 writer.add_image(f"centerness {i} feat {j}", centernesses[j][0], checkpoint, dataformats="HW")
                 writer.add_image(
                     f"centerness target {i} feat {j}", centerness_targets[j][0], checkpoint, dataformats="HW"
@@ -211,43 +212,13 @@ def _test_model(checkpoint, writer, model, loader, device):
     grid = _image_grid(images[0:24], 3, 2048)
     writer.add_image(f"fcos test {i}", grid, checkpoint, dataformats="HWC")
 
-    metrics = _compute_metrics(all_detections, all_class_labels, all_box_labels)
+    metrics = compute_metrics(all_detections, all_class_labels, all_box_labels)
     logging.info(
         f"Pascal voc metrics: TP: {metrics.true_positive_count}, FP: {metrics.false_positive_count}, mAP: {metrics.mean_average_precision}, total gt: {metrics.total_ground_truth_detections}"
     )
     writer.add_scalar("Metrics/mAP", metrics.mean_average_precision, checkpoint)
 
     writer.flush()
-
-
-def _compute_metrics(
-    detections: List[List[Detection]], class_labels: List[torch.Tensor], box_labels: List[torch.tensor]
-):
-    # TODO(Ross): support multiple classes
-    ground_truth_boxes_by_image = []
-    predicted_boxes_by_image = []
-    predicted_scores_by_image = []
-
-    for img_detections, img_class_labels, img_box_labels in zip(detections, class_labels, box_labels):
-        predicted_boxes = []
-        predicted_scores = []
-        gt_boxes = []
-
-        for detection in img_detections:
-            predicted_boxes.append(detection.bbox)
-            predicted_scores.append(detection.score)
-
-        # for box_label in img_box_labels:
-        for i in range(img_box_labels.shape[0]):
-            gt_boxes.append(img_box_labels[i, :].numpy())
-
-        ground_truth_boxes_by_image.append(gt_boxes)
-        predicted_boxes_by_image.append(predicted_boxes)
-        predicted_scores_by_image.append(predicted_scores)
-
-    return compute_pascal_voc_metrics(
-        ground_truth_boxes_by_image, predicted_boxes_by_image, predicted_scores_by_image
-    )
 
 
 def _image_grid(images: List[np.ndarray], images_per_row: int, image_width: int) -> np.ndarray:

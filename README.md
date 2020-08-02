@@ -7,7 +7,7 @@ It has been slightly adapted from the original paper [FCOS: Fully Convolutional 
 This package will work with or without a cuda GPU. Without a GPU, you're going to be waiting a fair bit longer.
 
 ![example output](example/img_180.png)
-
+_For car detection on the Cityscapes val set, the model achieves an mAP of 0.48. Average inference time is 20ms per image_.
 
 ## Quickstart
 From zero to training in under 2 minutes (assumes you have `pyenv` installed, with a working Python 3.8.1 available).

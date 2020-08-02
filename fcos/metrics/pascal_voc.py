@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import List, Dict
 
 import numpy as np
+import torch
 
 from fcos.vendor.pascal_voc_tools.evaluator import voc_eval
+from fcos.inference import Detection
 
 
 @dataclass
@@ -14,6 +16,36 @@ class PascalVOCMetrics:
     recall: float
     precision: float
     mean_average_precision: float
+
+
+def compute_metrics(
+    detections: List[List[Detection]], class_labels: List[torch.Tensor], box_labels: List[torch.tensor]
+):
+    # TODO(Ross): support multiple classes
+    ground_truth_boxes_by_image = []
+    predicted_boxes_by_image = []
+    predicted_scores_by_image = []
+
+    for img_detections, img_class_labels, img_box_labels in zip(detections, class_labels, box_labels):
+        predicted_boxes = []
+        predicted_scores = []
+        gt_boxes = []
+
+        for detection in img_detections:
+            predicted_boxes.append(detection.bbox)
+            predicted_scores.append(detection.score)
+
+        # for box_label in img_box_labels:
+        for i in range(img_box_labels.shape[0]):
+            gt_boxes.append(img_box_labels[i, :].numpy())
+
+        ground_truth_boxes_by_image.append(gt_boxes)
+        predicted_boxes_by_image.append(predicted_boxes)
+        predicted_scores_by_image.append(predicted_scores)
+
+    return compute_pascal_voc_metrics(
+        ground_truth_boxes_by_image, predicted_boxes_by_image, predicted_scores_by_image
+    )
 
 
 def compute_pascal_voc_metrics(

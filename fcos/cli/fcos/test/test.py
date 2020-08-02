@@ -3,13 +3,15 @@ import os
 import click
 import torch
 import cv2
-from torch.utils.data import DataLoader
+import time
 
+from torch.utils.data import DataLoader
 from torchvision.transforms import Resize
 
 from fcos.models import FCOS, normalize_batch
 from fcos.inference import detections_from_network_output, render_detections_to_image
 from fcos.datasets import CityscapesData, Split, collate_fn, tensor_to_image
+from fcos.metrics import compute_metrics
 
 
 @click.command()
@@ -50,8 +52,9 @@ def test(cityscapes_dir, model_checkpoint, output):
     model.load_state_dict(state["model"])
 
     loader = DataLoader(
-        # CityscapesData(Split.TEST, cityscapes_dir, image_transforms=[Resize(512)]),
-        CityscapesData(Split.TEST, cityscapes_dir),
+        CityscapesData(Split.VALIDATE, cityscapes_dir),
+        # CityscapesData(Split.VALIDATE, cityscapes_dir),
+        # CityscapesData(Split.TEST, cityscapes_dir),
         batch_size=1,
         shuffle=False,
         num_workers=2,
@@ -59,6 +62,11 @@ def test(cityscapes_dir, model_checkpoint, output):
     )
 
     model.eval()
+
+    all_detections = []
+    all_box_labels = []
+    all_class_labels = []
+    total_time_elapsed = 0.0
 
     for i, (x, class_labels, box_labels) in enumerate(loader, 0):
         print(f"Running detection for {i}/{len(loader)}")
@@ -69,7 +77,9 @@ def test(cityscapes_dir, model_checkpoint, output):
         x = normalize_batch(x)
 
         with torch.no_grad():
+            t0 = time.time()
             classes, centernesses, boxes = model(x)
+            total_time_elapsed += time.time() - t0
 
         img_height, img_width = x.shape[2:4]
 
@@ -80,3 +90,20 @@ def test(cityscapes_dir, model_checkpoint, output):
 
         path = os.path.join(output, f"img_{i}.png")
         cv2.imwrite(path, img)
+
+        all_detections.extend(detections)
+        all_box_labels.extend(box_labels)
+        all_class_labels.extend(class_labels)
+    print(f"Average inference time per image {total_time_elapsed / i}s")
+
+    # Note(Ross): For some reason I have no ground truth annotations for the Cityscapes test set.
+    # Therefore, this code throws an exception in that case. It works for the val set.
+    metrics = compute_metrics(all_detections, all_class_labels, all_box_labels)
+    print(
+        f"""\
+Pascal voc metrics:
+    total ground truth detections: {metrics.total_ground_truth_detections}
+    TP: {metrics.true_positive_count}
+    FP: {metrics.false_positive_count}
+    mAP: {metrics.mean_average_precision}"""
+    )
