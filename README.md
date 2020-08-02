@@ -2,15 +2,15 @@
 
 _A model implementing 2D object detection in images, trained on Cityscapes_
 
-This is a pure Python 3.8 implementation of the fully convolutional one-stage anchor free FCOS algorithm.
-It has been slightly adapted from the original paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
+This is a pure Python 3.8 implementation of the Fully Convolutional One-Stage (FCOS) object detection algorithm.
+There are some slight modifications from the original paper [FCOS: Fully Convolutional One-Stage Object Detection](https://arxiv.org/pdf/1904.01355.pdf).
 This package will work with or without a cuda GPU. Without a GPU, you're going to be waiting a fair bit longer.
 
 ![example output](example/img_180.png)
 _For car detection on the Cityscapes val set, the model achieves an mAP of 0.48 after 70 epochs of training on Cityscapes train set. Average inference time is 20ms per image on an RTX 2070 super_.
 
 ## Quickstart
-From zero to training in under 2 minutes (assumes you have `pyenv` installed, with a working Python 3.8.1 available).
+From zero to training in under 2 minutes (assumes you have `pyenv` installed with a working Python 3.8.1, and a local copy of the Cityscapes dataset).
 
 ```
 pyenv local 3.8.1
